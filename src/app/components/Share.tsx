@@ -1,305 +1,313 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { ArrowLeft, Heart, Target, Lightbulb, Users, Sparkles, AlertTriangle, Loader2 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
-import { Label } from './ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { ScrollArea } from './ui/scroll-area';
+import { Badge } from './ui/badge';
+import { Separator } from './ui/separator';
+import { ArrowLeft, Sparkles, AlertTriangle, RefreshCw, Eye, Send } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import * as api from '../utils/api';
 
 type Intention = 'support' | 'accountability' | 'perspective' | 'connection';
 
+const INTENTIONS: { value: Intention; label: string; blurb: string }[] = [
+  { value: 'support', label: 'Support', blurb: 'Emotional support and understanding' },
+  { value: 'accountability', label: 'Accountability', blurb: 'Encouragement toward a goal' },
+  { value: 'perspective', label: 'Perspective', blurb: 'Fresh insight or another viewpoint' },
+  { value: 'connection', label: 'Connection', blurb: 'A sense of shared experience' },
+];
+
+// Procedurally parallel sharing workflow for the two social conditions. Manual
+// and AI flows are identical (intention -> excerpt -> preview -> approve/cancel)
+// except that the AI condition inserts a mediation review step.
+type Step = 'intention' | 'excerpt' | 'ai_review' | 'preview';
+
 export function Share() {
   const navigate = useNavigate();
-  const { journalEntries, refreshData } = useApp();
-  const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
-  const [intention, setIntention] = useState<Intention>('support');
-  const [showPreview, setShowPreview] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [params] = useSearchParams();
+  const entryId = params.get('entryId');
+  const { journalEntries, refreshData, loadToday } = useApp();
 
-  // Mediator output sections
-  const [polishedEntry, setPolishedEntry] = useState('');
-  const [explanation, setExplanation] = useState('');
+  const entry = useMemo(
+    () => journalEntries.find((e) => e.id === entryId) || null,
+    [journalEntries, entryId]
+  );
+  const isAi = entry?.condition === 'ai';
+
+  const [step, setStep] = useState<Step>('intention');
+  const [intention, setIntention] = useState<Intention | null>(null);
+  const [excerpt, setExcerpt] = useState('');
+  const [finalText, setFinalText] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
-  const [validationPassed, setValidationPassed] = useState(true);
   const [validationIssues, setValidationIssues] = useState<string[]>([]);
+  const [regenCount, setRegenCount] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const unsharedEntries = journalEntries.filter(entry => !entry.shared);
+  // Ensure entries are available if the page is opened directly.
+  useEffect(() => {
+    if (!entry) refreshData();
+  }, [entry, refreshData]);
 
-  const handleGeneratePreview = async () => {
-    if (!selectedEntry) return;
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    if (entry && !excerpt) setExcerpt(entry.content);
+  }, [entry]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    try {
-      const result = await api.mediateEntry(selectedEntry, intention);
-      setPolishedEntry(result.polished_entry);
-      setExplanation(result.explanation);
-      setWarning(result.warning);
-      setValidationPassed(result.validation_passed);
-      setValidationIssues(result.validation_issues);
-      setShowPreview(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate preview');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const back = (
+    <Button variant="ghost" onClick={() => navigate('/today')}>
+      <ArrowLeft className="w-4 h-4 mr-2" />
+      Back to Today
+    </Button>
+  );
 
-  const handleApprove = async () => {
-    if (!selectedEntry) return;
-    setLoading(true);
-
-    try {
-      await api.approveSharing(selectedEntry, polishedEntry, intention, explanation, warning);
-      await refreshData();
-      setShowPreview(false);
-      setSelectedEntry(null);
-      setPolishedEntry('');
-      setExplanation('');
-      setWarning(null);
-      navigate('/menu');
-    } catch (err: any) {
-      setError(err.message || 'Failed to approve sharing');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeny = async () => {
-    if (selectedEntry) {
-      await api.denySharing(selectedEntry).catch(() => {});
-    }
-    setShowPreview(false);
-    setPolishedEntry('');
-    setExplanation('');
-    setWarning(null);
-    navigate('/menu');
-  };
-
-  return (
+  const wrap = (children: React.ReactNode) => (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-4xl mx-auto space-y-4">
-        <Button variant="ghost" onClick={() => navigate('/menu')}>
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Menu
-        </Button>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Share Journal Entry</CardTitle>
-            <CardDescription>
-              Select an entry and sharing intention to prepare it for a peer
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Intention Selection */}
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Select Sharing Intention</Label>
-              <RadioGroup value={intention} onValueChange={(value) => setIntention(value as Intention)}>
-                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50">
-                  <RadioGroupItem value="support" id="support" />
-                  <Label htmlFor="support" className="flex items-center gap-2 cursor-pointer flex-1">
-                    <Heart className="w-5 h-5 text-pink-500" />
-                    <div>
-                      <div className="font-medium">Support</div>
-                      <div className="text-sm text-gray-600">Seeking emotional support and understanding</div>
-                    </div>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50">
-                  <RadioGroupItem value="accountability" id="accountability" />
-                  <Label htmlFor="accountability" className="flex items-center gap-2 cursor-pointer flex-1">
-                    <Target className="w-5 h-5 text-blue-500" />
-                    <div>
-                      <div className="font-medium">Accountability & Goals</div>
-                      <div className="text-sm text-gray-600">Looking for encouragement and support in reaching your goals</div>
-                    </div>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50">
-                  <RadioGroupItem value="perspective" id="perspective" />
-                  <Label htmlFor="perspective" className="flex items-center gap-2 cursor-pointer flex-1">
-                    <Lightbulb className="w-5 h-5 text-yellow-500" />
-                    <div>
-                      <div className="font-medium">Perspective</div>
-                      <div className="text-sm text-gray-600">Seeking fresh insights and viewpoints</div>
-                    </div>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50">
-                  <RadioGroupItem value="connection" id="connection" />
-                  <Label htmlFor="connection" className="flex items-center gap-2 cursor-pointer flex-1">
-                    <Users className="w-5 h-5 text-green-500" />
-                    <div>
-                      <div className="font-medium">Connection</div>
-                      <div className="text-sm text-gray-600">Seeking shared experience and a sense of belonging</div>
-                    </div>
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            {/* Entry Selection */}
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">Select Entry to Share</Label>
-              {unsharedEntries.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  No entries available to share. Create a new entry first!
-                </p>
-              ) : (
-                <ScrollArea className="h-[300px] border rounded-lg p-4">
-                  <div className="space-y-3">
-                    {unsharedEntries.map(entry => (
-                      <div
-                        key={entry.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                          selectedEntry === entry.id ? 'border-indigo-500 bg-indigo-50' : 'hover:bg-gray-50'
-                        }`}
-                        onClick={() => setSelectedEntry(entry.id)}
-                      >
-                        <div className="text-sm text-gray-500 mb-2">
-                          {new Date(entry.created_at + 'Z').toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                        <p className="text-sm line-clamp-3">{entry.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              )}
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                onClick={handleGeneratePreview}
-                disabled={!selectedEntry || loading}
-                className="gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Generate Sharing Preview
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Preview Dialog */}
-        <Dialog open={showPreview} onOpenChange={setShowPreview}>
-          <DialogContent className="max-w-2xl max-h-[85vh]">
-            <DialogHeader>
-              <DialogTitle>Review Modified Entry</DialogTitle>
-              <DialogDescription>
-                Our AI has prepared your entry for sharing. Review the changes below. You can edit the polished entry before sending.
-              </DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="max-h-[calc(85vh-200px)]">
-              <div className="space-y-4 pr-4">
-                {/* Validation Issues */}
-                {!validationPassed && validationIssues.length > 0 && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4 text-red-500" />
-                      <span className="font-medium text-sm text-red-700">Validation Issues</span>
-                    </div>
-                    <ul className="text-sm text-red-600 list-disc list-inside">
-                      {validationIssues.map((issue, i) => (
-                        <li key={i}>{issue}</li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-red-500 mt-2">
-                      Please edit the entry below to resolve these issues, then click "Re-validate".
-                    </p>
-                  </div>
-                )}
-
-                {/* Warning */}
-                {warning && (
-                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4 text-orange-500" />
-                      <span className="font-medium text-sm text-orange-700">Assistant Warning</span>
-                    </div>
-                    <p className="text-sm text-orange-600">{warning}</p>
-                  </div>
-                )}
-
-                {/* Polished Entry - Editable */}
-                <div>
-                  <Label className="text-sm font-medium">Polished Entry (editable)</Label>
-                  <Textarea
-                    value={polishedEntry}
-                    onChange={(e) => setPolishedEntry(e.target.value)}
-                    className="mt-2 min-h-[200px]"
-                  />
-                </div>
-
-                {/* Explanation - Read Only */}
-                {explanation && (
-                  <div>
-                    <Label className="text-sm font-medium">Explanation of Changes</Label>
-                    <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm text-amber-800 whitespace-pre-wrap">{explanation}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleDeny}>
-                Deny
-              </Button>
-              {!validationPassed ? (
-                <Button onClick={handleGeneratePreview} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Re-validating...
-                    </>
-                  ) : (
-                    'Re-validate'
-                  )}
-                </Button>
-              ) : (
-                <Button onClick={handleApprove} disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Sending...
-                    </>
-                  ) : (
-                    'Approve & Send'
-                  )}
-                </Button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="max-w-3xl mx-auto space-y-4">
+        {back}
+        {children}
       </div>
     </div>
+  );
+
+  if (entryId && journalEntries.length > 0 && !entry) {
+    return wrap(<Card><CardContent className="py-12 text-center text-gray-500">Entry not found.</CardContent></Card>);
+  }
+  if (!entry) {
+    return wrap(<Card><CardContent className="py-12 text-center text-gray-500">Loading…</CardContent></Card>);
+  }
+  if (entry.condition !== 'manual' && entry.condition !== 'ai') {
+    return wrap(<Card><CardContent className="py-12 text-center text-gray-500">This entry is not in a sharing condition.</CardContent></Card>);
+  }
+  if (entry.shared || entry.share_decision) {
+    return wrap(
+      <Card>
+        <CardContent className="py-12 text-center space-y-2">
+          <h3 className="text-lg font-semibold">This entry's sharing step is complete</h3>
+          <p className="text-gray-600">
+            You already {entry.share_decision === 'canceled' ? 'canceled sharing' : 'shared'} this entry.
+          </p>
+          <Button variant="outline" onClick={() => navigate('/today')} className="mt-2">Back to Today</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const cancelShare = async () => {
+    setBusy(true);
+    try {
+      await api.cancelSharing({
+        entryId: entry.id,
+        intention,
+        selected_excerpt: excerpt,
+        ai_action: isAi ? 'canceled' : null,
+        regeneration_count: regenCount,
+      });
+      await Promise.all([refreshData(), loadToday()]);
+      navigate('/today');
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel');
+      setBusy(false);
+    }
+  };
+
+  const runMediation = async (regenerate: boolean) => {
+    if (!intention) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.mediateEntry({ entryId: entry.id, intention, excerpt, regenerate });
+      setAiSuggestion(result.polished_entry);
+      setFinalText(result.polished_entry);
+      setExplanation(result.explanation);
+      setWarning(result.warning);
+      setValidationIssues(result.validation_issues || []);
+      if (regenerate) setRegenCount((c) => c + 1);
+      setStep('ai_review');
+    } catch (err: any) {
+      setError(err.message || 'AI mediation failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async () => {
+    if (!intention) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const aiAction = isAi ? (finalText === aiSuggestion ? 'accepted' : 'edited') : null;
+      await api.approveSharing({
+        entryId: entry.id,
+        intention,
+        selected_excerpt: excerpt,
+        final_shared_text: finalText,
+        ai_action: aiAction,
+        regeneration_count: regenCount,
+        ai_suggestion: aiSuggestion,
+        explanation,
+        warning,
+      });
+      await Promise.all([refreshData(), loadToday()]);
+      navigate('/today');
+    } catch (err: any) {
+      setError(err.message || 'Failed to share');
+      setBusy(false);
+    }
+  };
+
+  const stepLabel = isAi
+    ? { intention: '1 of 4', excerpt: '2 of 4', ai_review: '3 of 4', preview: '4 of 4' }
+    : { intention: '1 of 3', excerpt: '2 of 3', ai_review: '', preview: '3 of 3' };
+
+  return wrap(
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CardTitle>
+            {isAi ? 'Mediate & Share' : 'Share'} Entry {entry.entry_index}
+          </CardTitle>
+          <Badge variant="outline" className="capitalize">{entry.condition === 'ai' ? 'AI-mediated' : 'Manual'}</Badge>
+          <Badge variant="secondary">Step {stepLabel[step]}</Badge>
+        </div>
+        <CardDescription>Nothing is shared until you approve it on the final step.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && <p className="text-sm text-red-500">{error}</p>}
+
+        {/* Step 1: intention */}
+        {step === 'intention' && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">What kind of response are you hoping for?</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {INTENTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setIntention(opt.value)}
+                  className={`text-left rounded-lg border p-3 transition-colors ${
+                    intention === opt.value ? 'border-indigo-500 bg-indigo-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <p className="font-medium text-sm">{opt.label}</p>
+                  <p className="text-xs text-gray-500">{opt.blurb}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button disabled={!intention} onClick={() => setStep('excerpt')}>Next</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: excerpt selection (edit-to-trim) */}
+        {step === 'excerpt' && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">Your original entry</p>
+              <div className="rounded-lg bg-gray-50 p-3 max-h-40 overflow-y-auto">
+                <p className="text-sm whitespace-pre-wrap text-gray-700">{entry.content}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium mb-1">
+                {isAi ? 'Select the text you want the AI to help you share' : 'Edit what your peer will see'}
+              </p>
+              <p className="text-xs text-gray-500 mb-2">
+                Trim or edit the text below. It starts as your full entry.
+              </p>
+              <Textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} className="min-h-[180px]" />
+            </div>
+            <div className="flex justify-between">
+              <Button variant="ghost" onClick={() => setStep('intention')}>Back</Button>
+              {isAi ? (
+                <Button disabled={!excerpt.trim() || busy} onClick={() => runMediation(false)} className="gap-1">
+                  <Sparkles className="w-4 h-4" />
+                  {busy ? 'Getting suggestion…' : 'Get AI suggestion'}
+                </Button>
+              ) : (
+                <Button
+                  disabled={!excerpt.trim()}
+                  onClick={() => { setFinalText(excerpt); setStep('preview'); }}
+                  className="gap-1"
+                >
+                  <Eye className="w-4 h-4" /> Preview
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 (AI only): review the AI suggestion */}
+        {step === 'ai_review' && isAi && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-1">AI-suggested version (you can edit it)</p>
+              <Textarea value={finalText} onChange={(e) => setFinalText(e.target.value)} className="min-h-[160px]" />
+            </div>
+            {explanation && (
+              <div className="rounded-lg bg-amber-50 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-amber-600 mb-1">What the AI changed</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{explanation}</p>
+              </div>
+            )}
+            {warning && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 p-3 flex gap-2">
+                <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-orange-600 mb-1">Oversharing warning</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{warning}</p>
+                </div>
+              </div>
+            )}
+            {validationIssues.length > 0 && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-red-600 mb-1">Safety check flagged</p>
+                <ul className="list-disc list-inside text-sm text-gray-800">
+                  {validationIssues.map((i, idx) => <li key={idx}>{i}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <Button variant="ghost" onClick={() => setStep('excerpt')}>Back</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" disabled={busy} onClick={() => runMediation(true)} className="gap-1">
+                  <RefreshCw className="w-4 h-4" /> Regenerate
+                </Button>
+                <Button disabled={!finalText.trim()} onClick={() => setStep('preview')} className="gap-1">
+                  <Eye className="w-4 h-4" /> Preview
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Final step: preview exactly what the peer will see, then approve/cancel */}
+        {step === 'preview' && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+                Exactly what your peer will see
+              </p>
+              <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+                <Badge variant="outline" className="capitalize mb-2">Intention: {intention}</Badge>
+                <p className="text-sm whitespace-pre-wrap text-gray-900">{finalText}</p>
+              </div>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <Button variant="ghost" onClick={() => setStep(isAi ? 'ai_review' : 'excerpt')}>Edit</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" disabled={busy} onClick={cancelShare}>Cancel sharing</Button>
+                <Button disabled={busy || !finalText.trim()} onClick={approve} className="gap-1">
+                  <Send className="w-4 h-4" /> {busy ? 'Sharing…' : 'Approve & share'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

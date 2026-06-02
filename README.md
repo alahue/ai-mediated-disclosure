@@ -11,7 +11,30 @@ The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1
 
 ## Study platform: build status
 
-The platform is being rebuilt in phases. **Phase 1 (foundations)** is in place:
+The platform is being rebuilt in phases.
+
+**Phase 2 (condition workflows & session orchestration)** is in place:
+
+- **Guided "Today" session** — after login, participants land on a daily task
+  checklist (`/today`) that gates each task by status (available / done / locked)
+  and surfaces later-phase tasks (peer exchange, surveys) as upcoming.
+- **Condition-parallel sharing** — the manual and AI social conditions share an
+  identical workflow (intention → select/edit excerpt → preview exactly what the
+  peer sees → approve / edit / cancel). The **AI condition adds only** a mediation
+  review step: an §8-aligned suggested/redacted version, an oversharing warning,
+  an explanation of changes, and a regenerate option. Nothing is shared without
+  explicit approval.
+- **Behavioral disclosure logging** — share/no-share, excerpt length, percentage
+  shared, time-to-share, edit distance (excerpt→final and AI→final), canceled
+  share, AI action, and regeneration count, all recorded to the event log.
+- **Private-condition delayed reflection** — reflect on a prior entry with no peer.
+
+*Deferred to Phase 3* (need a real peer): responding to a peer's entry, reading
+the peer's response to your own entry, and the social reflection-after-response.
+*Phase 4*: the three in-app survey instruments. *Deferred*: AI prompt/model
+freezing. The legacy `/menu` and `/review` screens remain for now.
+
+**Phase 1 (foundations)** is in place:
 
 - **Counterbalanced enrollment** — each participant is assigned one of the six
   condition orders in round-robin order at creation.

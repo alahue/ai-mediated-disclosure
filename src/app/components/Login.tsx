@@ -29,7 +29,7 @@ export function Login() {
       await api.login(pin);
       setCurrentUser(pin);
       await Promise.all([refreshData(), loadToday()]);
-      navigate('/menu');
+      navigate('/today');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

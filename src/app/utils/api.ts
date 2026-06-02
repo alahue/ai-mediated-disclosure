@@ -79,42 +79,53 @@ export async function deleteEntry(id: string) {
 }
 
 // Sharing
-export async function mediateEntry(entryId: string, intention: string) {
-  return request<{
-    polished_entry: string;
-    explanation: string;
-    warning: string | null;
-    validation_passed: boolean;
-    validation_issues: string[];
-  }>('/sharing/mediate', {
+export interface MediateResult {
+  polished_entry: string;
+  explanation: string;
+  warning: string | null;
+  validation_passed: boolean;
+  validation_issues: string[];
+}
+
+export async function mediateEntry(params: {
+  entryId: string;
+  intention: string;
+  excerpt: string;
+  regenerate?: boolean;
+}) {
+  return request<MediateResult>('/sharing/mediate', {
     method: 'POST',
-    body: JSON.stringify({ entryId, intention }),
+    body: JSON.stringify(params),
   });
 }
 
-export async function approveSharing(
-  entryId: string,
-  polishedEntry: string,
-  intention: string,
-  explanation?: string,
-  warning?: string | null
-) {
+export async function approveSharing(payload: {
+  entryId: string;
+  intention: string;
+  selected_excerpt: string;
+  final_shared_text: string;
+  ai_action?: string | null;
+  regeneration_count?: number;
+  ai_suggestion?: string | null;
+  explanation?: string | null;
+  warning?: string | null;
+}) {
   return request<{ success: boolean }>('/sharing/approve', {
     method: 'POST',
-    body: JSON.stringify({
-      entryId,
-      polished_entry: polishedEntry,
-      intention,
-      explanation,
-      warning,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function denySharing(entryId: string) {
-  return request<{ success: boolean }>('/sharing/deny', {
+export async function cancelSharing(payload: {
+  entryId: string;
+  intention?: string | null;
+  selected_excerpt?: string | null;
+  ai_action?: string | null;
+  regeneration_count?: number;
+}) {
+  return request<{ success: boolean }>('/sharing/cancel', {
     method: 'POST',
-    body: JSON.stringify({ entryId }),
+    body: JSON.stringify(payload),
   });
 }
 

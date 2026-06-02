@@ -112,7 +112,28 @@ export interface DayPlan {
   is_survey_day: boolean; // condition_day === 5
   writing_entry_index: number | null; // 1..3 if a focal entry is written today
   prompt: StudyPrompt | null;
-  activities: string[]; // human-readable orientation labels for the day
+  tasks: DayTask[]; // structured, phase-tagged tasks for the day
+  activities: string[]; // human-readable labels (derived from tasks)
+}
+
+// The kinds of tasks a participant can encounter in a daily session.
+export type TaskType =
+  | 'write'
+  | 'share'
+  | 'reflect_private'
+  | 'respond_peer'
+  | 'read_response'
+  | 'reflect_social'
+  | 'survey_entry_experience'
+  | 'survey_peer_response'
+  | 'survey_condition';
+
+export interface DayTask {
+  key: string; // unique within the day, e.g. 'write-1'
+  type: TaskType;
+  label: string;
+  entry_index: number | null; // the focal entry this task concerns, if any
+  phase: 1 | 2 | 3 | 4; // build phase in which this task becomes actionable
 }
 
 // Which focal entry (if any) is written on a given day within a condition week.
@@ -122,40 +143,106 @@ function writingEntryIndexForConditionDay(conditionDay: number): number | null {
   return null;
 }
 
-// Orientation labels describing what a participant does on a given condition day.
-// These mirror the procedure tables in §7. Phase 1 surfaces them for orientation;
-// later phases wire each task to an interactive workflow.
-function activitiesForDay(condition: Condition, conditionDay: number): string[] {
+// Structured task list for a given condition day, mirroring the procedure
+// tables in §7. Each task carries the build phase in which it becomes
+// actionable so the UI can present later-phase tasks as upcoming.
+function tasksForDay(condition: Condition, conditionDay: number): DayTask[] {
   const social = isSocialCondition(condition);
   const shareVerb = condition === 'ai' ? 'Mediate and share' : 'Share';
+  const writeIdx = writingEntryIndexForConditionDay(conditionDay);
 
-  switch (conditionDay) {
-    case 1:
-      return social ? [`Write Entry 1`, `${shareVerb} Entry 1`] : [`Write Entry 1`];
-    case 2:
-      return social
-        ? [`Respond to a peer's entry`, `Write Entry 2`, `${shareVerb} Entry 2`]
-        : [`Reflect on Entry 1 (optional)`, `Write Entry 2`];
-    case 3:
-      return social
-        ? [
-            `Read the peer response to your Entry 1, then reflect`,
-            `Respond to a peer's entry`,
-            `Write Entry 3`,
-            `${shareVerb} Entry 3`,
-          ]
-        : [`Reflect on Entry 2 (optional)`, `Write Entry 3`];
-    case 4:
-      return social
-        ? [`Read the peer response to your Entry 2, then reflect`, `Respond to a peer's entry`]
-        : [`Reflect on Entry 3 (optional)`];
-    case 5:
-      return social
-        ? [`Read the peer response to your Entry 3, then reflect`, `End-of-condition survey`]
-        : [`End-of-condition survey`];
-    default:
-      return [];
+  const tasks: DayTask[] = [];
+
+  // Reading a peer's response to a prior entry (+ its peer-response check and
+  // social reflection) happens on the days after that entry was shared.
+  // Entry N is shared on condition day N and read on condition day N+2.
+  const readEntryIndex = conditionDay >= 3 ? conditionDay - 2 : null;
+  if (social && readEntryIndex) {
+    tasks.push({
+      key: `read-${readEntryIndex}`,
+      type: 'read_response',
+      label: `Read the peer response to your Entry ${readEntryIndex}`,
+      entry_index: readEntryIndex,
+      phase: 3,
+    });
+    tasks.push({
+      key: `survey-pr-${readEntryIndex}`,
+      type: 'survey_peer_response',
+      label: `Peer response check (Entry ${readEntryIndex})`,
+      entry_index: readEntryIndex,
+      phase: 4,
+    });
+    tasks.push({
+      key: `reflect-social-${readEntryIndex}`,
+      type: 'reflect_social',
+      label: `Reflect on your Entry ${readEntryIndex} after the response`,
+      entry_index: readEntryIndex,
+      phase: 3,
+    });
   }
+
+  // Private-condition delayed reflection on the previous day's entry.
+  if (!social && conditionDay >= 2 && conditionDay <= ENTRIES_PER_CONDITION + 1) {
+    const reflectIdx = conditionDay - 1;
+    tasks.push({
+      key: `reflect-${reflectIdx}`,
+      type: 'reflect_private',
+      label: `Reflect on your Entry ${reflectIdx} (optional)`,
+      entry_index: reflectIdx,
+      phase: 2,
+    });
+  }
+
+  // Responding to a (different) peer's shared entry on social days 2-4.
+  if (social && conditionDay >= 2 && conditionDay <= 4) {
+    tasks.push({
+      key: `respond-${conditionDay}`,
+      type: 'respond_peer',
+      label: `Respond to a peer's entry`,
+      entry_index: null,
+      phase: 3,
+    });
+  }
+
+  // Writing today's focal entry.
+  if (writeIdx) {
+    tasks.push({
+      key: `write-${writeIdx}`,
+      type: 'write',
+      label: `Write Entry ${writeIdx}`,
+      entry_index: writeIdx,
+      phase: 1,
+    });
+    if (social) {
+      tasks.push({
+        key: `share-${writeIdx}`,
+        type: 'share',
+        label: `${shareVerb} Entry ${writeIdx}`,
+        entry_index: writeIdx,
+        phase: 2,
+      });
+    }
+    tasks.push({
+      key: `survey-ee-${writeIdx}`,
+      type: 'survey_entry_experience',
+      label: `Entry experience check (Entry ${writeIdx})`,
+      entry_index: writeIdx,
+      phase: 4,
+    });
+  }
+
+  // End-of-condition survey on the final day of the week.
+  if (conditionDay === DAYS_PER_CONDITION) {
+    tasks.push({
+      key: 'survey-condition',
+      type: 'survey_condition',
+      label: 'End-of-condition survey',
+      entry_index: null,
+      phase: 4,
+    });
+  }
+
+  return tasks;
 }
 
 export function getDayPlan(order: Condition[] | null, studyDay: number): DayPlan {
@@ -172,6 +259,7 @@ export function getDayPlan(order: Condition[] | null, studyDay: number): DayPlan
     is_survey_day: false,
     writing_entry_index: null,
     prompt: null,
+    tasks: [],
     activities: [],
   };
 
@@ -192,6 +280,7 @@ export function getDayPlan(order: Condition[] | null, studyDay: number): DayPlan
   const conditionDay = ((studyDay - 1) % DAYS_PER_CONDITION) + 1; // 1..5
   const writingEntryIndex = writingEntryIndexForConditionDay(conditionDay);
   const prompt = writingEntryIndex ? getPromptForEntryIndex(writingEntryIndex) : null;
+  const tasks = tasksForDay(condition, conditionDay);
 
   return {
     study_day: studyDay,
@@ -206,7 +295,8 @@ export function getDayPlan(order: Condition[] | null, studyDay: number): DayPlan
     is_survey_day: conditionDay === DAYS_PER_CONDITION,
     writing_entry_index: writingEntryIndex,
     prompt,
-    activities: activitiesForDay(condition, conditionDay),
+    tasks,
+    activities: tasks.map((t) => t.label),
   };
 }
 

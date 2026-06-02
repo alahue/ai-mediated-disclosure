@@ -3,6 +3,29 @@ import * as api from '../utils/api';
 
 export type Condition = 'private' | 'manual' | 'ai';
 
+export type TaskType =
+  | 'write'
+  | 'share'
+  | 'reflect_private'
+  | 'respond_peer'
+  | 'read_response'
+  | 'reflect_social'
+  | 'survey_entry_experience'
+  | 'survey_peer_response'
+  | 'survey_condition';
+
+export type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming';
+
+export interface DayTask {
+  key: string;
+  type: TaskType;
+  label: string;
+  entry_index: number | null;
+  phase: 1 | 2 | 3 | 4;
+  entry_id: string | null;
+  status: TaskStatus;
+}
+
 export interface DayPlan {
   study_day: number;
   in_study: boolean;
@@ -16,6 +39,7 @@ export interface DayPlan {
   is_survey_day: boolean;
   writing_entry_index: number | null;
   prompt: { id: string; entry_index: number; prompt_type: string; text: string } | null;
+  tasks: DayTask[];
   activities: string[];
 }
 

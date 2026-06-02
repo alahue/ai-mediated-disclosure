@@ -42,7 +42,7 @@ export function Write() {
         write_start_time: writeStartRef.current,
         write_complete_time: new Date().toISOString(),
       });
-      navigate('/history');
+      navigate('/today');
     } catch (err: any) {
       setError(err.message || 'Failed to save entry');
     } finally {
@@ -51,9 +51,9 @@ export function Write() {
   };
 
   const back = (
-    <Button variant="ghost" onClick={() => navigate('/menu')}>
+    <Button variant="ghost" onClick={() => navigate('/today')}>
       <ArrowLeft className="w-4 h-4 mr-2" />
-      Back to Menu
+      Back to Today
     </Button>
   );
 
