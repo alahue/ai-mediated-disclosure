@@ -40,9 +40,9 @@ export function History() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-4xl mx-auto space-y-4">
-        <Button variant="ghost" onClick={() => navigate('/menu')}>
+        <Button variant="ghost" onClick={() => navigate('/today')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Menu
+          Back to Today
         </Button>
 
         <Card>

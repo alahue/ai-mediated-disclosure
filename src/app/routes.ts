@@ -1,6 +1,5 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, redirect } from "react-router";
 import { Login } from "./components/Login";
-import { MainMenu } from "./components/MainMenu";
 import { Today } from "./components/Today";
 import { Write } from "./components/Write";
 import { History } from "./components/History";
@@ -18,8 +17,9 @@ export const router = createBrowserRouter([
     Component: Today,
   },
   {
+    // Legacy hub: the guided Today flow is now the single participant hub.
     path: "/menu",
-    Component: MainMenu,
+    loader: () => redirect("/today"),
   },
   {
     path: "/write",
