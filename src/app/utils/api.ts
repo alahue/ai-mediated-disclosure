@@ -46,15 +46,24 @@ export async function logout() {
   setApiPin(null);
 }
 
+// Study
+export async function getToday() {
+  return request<any>('/study/today');
+}
+
 // Journal Entries
 export async function getEntries() {
   return request<any[]>('/entries');
 }
 
-export async function createEntry(content: string) {
+export async function createEntry(payload: {
+  content: string;
+  write_start_time?: string | null;
+  write_complete_time?: string | null;
+}) {
   return request<any>('/entries', {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -188,6 +197,13 @@ export async function adminCreateUser(pin: string) {
 
 export async function adminDeleteUser(pin: string) {
   return adminRequest<{ success: boolean }>(`/users/${pin}`, { method: 'DELETE' });
+}
+
+export async function adminSetStudyDay(pin: string, body: { day?: number; delta?: number }) {
+  return adminRequest<{ success: boolean; current_study_day: number; day_plan: any }>(
+    `/users/${pin}/study-day`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
 }
 
 export async function adminGetUserHistory(pin: string) {

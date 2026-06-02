@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
+import { logEvent } from '../services/events.js';
+import { decodeConditionOrder, getDayPlan } from '../study/config.js';
 
 const router = Router();
 
@@ -10,11 +12,14 @@ router.get('/', (req: Request, res: Response) => {
 
   const entries = db.prepare(`
     SELECT je.*,
+      p.text AS prompt_text,
+      p.prompt_type AS prompt_type,
       spr.what_i_heard AS sim_what_i_heard,
       spr.what_im_wondering AS sim_what_im_wondering,
       spr.what_i_suggest AS sim_what_i_suggest,
       ra.content AS reflection_content
     FROM journal_entries je
+    LEFT JOIN prompts p ON p.id = je.prompt_id
     LEFT JOIN simulated_peer_responses spr ON spr.journal_entry_id = je.id
     LEFT JOIN reflection_addendums ra ON ra.journal_entry_id = je.id
     WHERE je.user_pin = ?
@@ -24,22 +29,85 @@ router.get('/', (req: Request, res: Response) => {
   res.json(entries);
 });
 
+// Create the focal journal entry for today's writing slot. The entry is linked
+// to the participant's current condition, study day, entry index, and prompt
+// (§7 data linkage), and write start/complete times are recorded for the
+// behavioral disclosure measures.
 router.post('/', (req: Request, res: Response) => {
   const userPin = (req as any).userPin;
-  const { content } = req.body;
+  const { content, write_start_time, write_complete_time } = req.body;
 
-  if (!content || typeof content !== 'string') {
+  if (!content || typeof content !== 'string' || !content.trim()) {
     res.status(400).json({ error: 'Content is required' });
     return;
   }
 
   const db = getDb();
-  const id = uuidv4();
+  const user = db.prepare('SELECT * FROM users WHERE pin = ?').get(userPin) as any;
+  if (!user) {
+    res.status(404).json({ error: 'Participant not found' });
+    return;
+  }
 
+  const order = decodeConditionOrder(user.condition_order);
+  const studyDay = user.current_study_day ?? 0;
+  const plan = getDayPlan(order, studyDay);
+
+  // Entries can only be written on a day with a scheduled focal-writing task.
+  if (!plan.in_study || !plan.writing_entry_index || !plan.condition || !plan.prompt) {
+    res.status(409).json({
+      error: 'No journal entry is scheduled to be written today.',
+    });
+    return;
+  }
+
+  // One focal entry per (condition, entry_index) slot.
+  const existing = db
+    .prepare(
+      `SELECT id FROM journal_entries
+       WHERE user_pin = ? AND condition = ? AND entry_index = ?`
+    )
+    .get(userPin, plan.condition, plan.writing_entry_index);
+  if (existing) {
+    res.status(409).json({ error: 'You have already written this entry.' });
+    return;
+  }
+
+  const id = uuidv4();
   db.prepare(`
-    INSERT INTO journal_entries (id, user_pin, content, shared, approved)
-    VALUES (?, ?, ?, 0, 0)
-  `).run(id, userPin, content);
+    INSERT INTO journal_entries (
+      id, user_pin, content,
+      condition, condition_order, study_day, entry_index, prompt_id,
+      write_start_time, write_complete_time,
+      shared, approved
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+  `).run(
+    id,
+    userPin,
+    content,
+    plan.condition,
+    user.condition_order,
+    studyDay,
+    plan.writing_entry_index,
+    plan.prompt.id,
+    write_start_time || null,
+    write_complete_time || new Date().toISOString()
+  );
+
+  logEvent(db, {
+    user_pin: userPin,
+    study_day: studyDay,
+    condition: plan.condition,
+    entry_id: id,
+    event_type: 'entry_created',
+    payload: {
+      entry_index: plan.writing_entry_index,
+      prompt_id: plan.prompt.id,
+      char_count: content.length,
+      write_start_time: write_start_time || null,
+      write_complete_time: write_complete_time || null,
+    },
+  });
 
   const entry = db.prepare('SELECT * FROM journal_entries WHERE id = ?').get(id);
   res.status(201).json(entry);
@@ -92,6 +160,12 @@ router.delete('/:id', (req: Request, res: Response) => {
     res.status(404).json({ error: 'Entry not found' });
     return;
   }
+
+  logEvent(db, {
+    user_pin: userPin,
+    entry_id: id,
+    event_type: 'entry_deleted',
+  });
 
   res.json({ success: true });
 });

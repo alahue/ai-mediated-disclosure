@@ -10,6 +10,7 @@ import sharingRoutes from './routes/sharing.js';
 import peersRoutes from './routes/peers.js';
 import reflectionsRoutes from './routes/reflections.js';
 import adminRoutes from './routes/admin.js';
+import studyRoutes from './routes/study.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Protected routes (require PIN)
+app.use('/api/study', requirePin, studyRoutes);
 app.use('/api/entries', requirePin, entriesRoutes);
 app.use('/api/sharing', requirePin, sharingRoutes);
 app.use('/api/peers', requirePin, peersRoutes);

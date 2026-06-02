@@ -8,7 +8,7 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
-import { Lock, Plus, Trash2, Eye, ArrowLeft } from 'lucide-react';
+import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus } from 'lucide-react';
 import * as api from '../utils/api';
 
 interface UserRow {
@@ -17,6 +17,15 @@ interface UserRow {
   is_active: number;
   entry_count: number;
   peer_entry_count: number;
+  condition_order: string | null;
+  current_study_day: number;
+  day_plan: {
+    not_started: boolean;
+    complete: boolean;
+    in_study: boolean;
+    condition_label: string | null;
+    condition_day: number | null;
+  };
 }
 
 export function Admin() {
@@ -73,6 +82,15 @@ export function Admin() {
       setCreateError(err.message || 'Failed to create user');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSetStudyDay = async (pin: string, body: { day?: number; delta?: number }) => {
+    try {
+      await api.adminSetStudyDay(pin, body);
+      await loadUsers();
+    } catch (err) {
+      console.error('Failed to update study day:', err);
     }
   };
 
@@ -344,8 +362,11 @@ export function Admin() {
         {/* Create User */}
         <Card>
           <CardHeader>
-            <CardTitle>Create User</CardTitle>
-            <CardDescription>Add a new participant with a 4-digit PIN</CardDescription>
+            <CardTitle>Create Participant</CardTitle>
+            <CardDescription>
+              Add a participant with a 4-digit PIN. A counterbalanced condition order is assigned
+              automatically. Participants start on Day 0 (not started) — advance their study day below.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-end gap-3">
@@ -382,19 +403,56 @@ export function Admin() {
             ) : (
               <div className="space-y-2">
                 {users.map(user => (
-                  <div key={user.pin} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                    <div className="flex items-center gap-4">
-                      <span className="font-mono text-lg font-semibold">{user.pin}</span>
-                      <span className="text-sm text-gray-500">
-                        Created: {new Date(user.created_at + 'Z').toLocaleDateString()}
-                      </span>
-                      <Badge variant="secondary">{user.entry_count} entries</Badge>
-                      <Badge variant="outline">{user.peer_entry_count} peer entries</Badge>
+                  <div key={user.pin} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 gap-4">
+                    <div className="flex flex-col gap-2 min-w-0">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="font-mono text-lg font-semibold">{user.pin}</span>
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {user.condition_order
+                            ? user.condition_order.split(',').map(c => c[0].toUpperCase()).join(' → ')
+                            : 'no order'}
+                        </Badge>
+                        <Badge variant="secondary">{user.entry_count} entries</Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        {user.day_plan.not_started ? (
+                          <span>Not started (Day 0)</span>
+                        ) : user.day_plan.complete ? (
+                          <span className="text-green-600 font-medium">Completed all 15 days</span>
+                        ) : (
+                          <span>
+                            <span className="font-medium">Day {user.current_study_day}/15</span>
+                            {user.day_plan.condition_label && (
+                              <> · {user.day_plan.condition_label} (day {user.day_plan.condition_day}/5)</>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* Admin-driven study-day cadence */}
+                      <div className="flex items-center gap-1 mr-1">
+                        <Button
+                          variant="outline" size="icon" className="h-8 w-8"
+                          disabled={!user.condition_order || user.current_study_day <= 0}
+                          onClick={() => handleSetStudyDay(user.pin, { delta: -1 })}
+                          title="Previous day"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </Button>
+                        <span className="w-10 text-center text-sm font-medium">D{user.current_study_day}</span>
+                        <Button
+                          variant="outline" size="icon" className="h-8 w-8"
+                          disabled={!user.condition_order || user.current_study_day >= 16}
+                          onClick={() => handleSetStudyDay(user.pin, { delta: 1 })}
+                          title="Advance day"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
                       <Button variant="outline" size="sm" className="gap-1" onClick={() => loadUserHistory(user.pin)}>
                         <Eye className="w-4 h-4" />
-                        View History
+                        History
                       </Button>
                       <Button
                         variant="ghost" size="icon" className="h-8 w-8"

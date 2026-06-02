@@ -12,7 +12,9 @@ router.post('/login', (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT pin, created_at FROM users WHERE pin = ? AND is_active = 1').get(pin);
+  const user = db.prepare(
+    'SELECT pin, created_at, condition_order, current_study_day FROM users WHERE pin = ? AND is_active = 1'
+  ).get(pin);
 
   if (!user) {
     res.status(401).json({ error: 'Invalid PIN. Please contact the study administrator.' });

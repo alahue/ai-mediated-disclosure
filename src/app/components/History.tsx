@@ -70,10 +70,19 @@ export function History() {
                           className="flex-1 min-w-0 cursor-pointer"
                           onClick={() => setSelectedEntry(entry.id)}
                         >
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <div className="text-sm text-gray-500">
                               {formatDate(entry.created_at)}
                             </div>
+                            {entry.study_day != null && (
+                              <Badge variant="outline" className="text-xs">Day {entry.study_day}</Badge>
+                            )}
+                            {entry.condition && (
+                              <Badge variant="outline" className="text-xs capitalize">{entry.condition}</Badge>
+                            )}
+                            {entry.entry_index != null && (
+                              <Badge variant="outline" className="text-xs">Entry {entry.entry_index}</Badge>
+                            )}
                             {entry.shared && (
                               <Badge variant="secondary" className="text-xs">Shared</Badge>
                             )}
@@ -128,6 +137,16 @@ export function History() {
                       minute: '2-digit',
                     })}
                   </div>
+
+                  {/* Prompt */}
+                  {currentEntry.prompt_text && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Prompt</h3>
+                      <div className="p-4 bg-indigo-50 rounded-lg">
+                        <p className="text-sm">{currentEntry.prompt_text}</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Original Entry */}
                   <div>

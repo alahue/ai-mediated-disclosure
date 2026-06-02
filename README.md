@@ -1,8 +1,39 @@
 # AI Peer Journaling App
 
-An AI-mediated peer journaling platform built for usability study research. Users write journal entries, share them with peers through an AI mediator that redacts personal information and polishes content, respond to peer entries, and reflect on feedback.
+An AI-mediated peer journaling platform for the CHI study **"From Private
+Reflection to AI-Mediated Disclosure."** It is being adapted from a usability
+prototype into an instrumented field-study platform: a 3-week within-subjects
+crossover (private / manual-sharing / AI-mediated conditions), with a matched
+daily writing-prompt schedule, entry-linked behavioral logging, rotating
+anonymous peers, and in-app survey instruments.
 
 The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1kjj7HZQ/AI-Peer-Journaling-App.
+
+## Study platform: build status
+
+The platform is being rebuilt in phases. **Phase 1 (foundations)** is in place:
+
+- **Counterbalanced enrollment** — each participant is assigned one of the six
+  condition orders in round-robin order at creation.
+- **Admin-advanced study day** — the cadence is driven by an admin control
+  (`current_study_day`, 0–15) rather than the real clock, for deterministic
+  piloting; real timestamps are still logged.
+- **Matched prompt schedule** — the three Appendix-A writing prompts, served per
+  entry/condition day.
+- **Real entry authoring** — participants write and save their own entries
+  (sample-entry seeding removed); each entry is linked to its condition,
+  condition order, study day, entry index, prompt, and write start/complete
+  times (§7 data linkage).
+- **Event-log spine** — an append-only `events` table records enrollment,
+  session starts, study-day changes, and entry creation/deletion.
+
+Later phases (not yet built): the three condition workflows with manual/AI
+procedural parity, rotating real-peer routing, the three in-app survey
+instruments (entry experience check, peer response check, end-of-condition
+survey), and de-identified data export. AI prompt/model freezing is deferred.
+
+The legacy Share/Review screens still run on the new schema and will be reworked
+in the condition-workflow phase.
 
 ## Architecture
 

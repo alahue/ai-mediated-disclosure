@@ -1,20 +1,54 @@
+export type Condition = 'private' | 'manual' | 'ai';
+
 export interface User {
   pin: string;
+  condition_order: string | null;
+  current_study_day: number;
   created_at: string;
   is_active: number;
+}
+
+export interface Prompt {
+  id: string;
+  entry_index: number;
+  prompt_type: string;
+  text: string;
 }
 
 export interface JournalEntry {
   id: string;
   user_pin: string;
   content: string;
+  // Experimental context (entry-linked logging, §7)
+  condition: Condition | null;
+  condition_order: string | null;
+  study_day: number | null;
+  entry_index: number | null;
+  prompt_id: string | null;
+  write_start_time: string | null;
+  write_complete_time: string | null;
+  // Sharing / disclosure
+  selected_excerpt: string | null;
   modified_content: string | null;
+  final_shared_text: string | null;
   mediator_explanation: string | null;
   mediator_warning: string | null;
+  ai_action: string | null;
+  share_decision: string | null;
   intention: 'support' | 'accountability' | 'perspective' | 'connection' | null;
   shared: number;
   approved: number;
+  shared_at: string | null;
   created_at: string;
+}
+
+export interface Session {
+  id: string;
+  user_pin: string;
+  study_day: number;
+  condition: string | null;
+  started_at: string;
+  completed_at: string | null;
 }
 
 export interface PeerEntry {

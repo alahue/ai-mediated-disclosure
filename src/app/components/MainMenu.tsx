@@ -8,9 +8,16 @@ import { useApp } from '../context/AppContext';
 
 export function MainMenu() {
   const navigate = useNavigate();
-  const { setCurrentUser, peerEntries, entriesAwaitingReflection } = useApp();
+  const { setCurrentUser, peerEntries, entriesAwaitingReflection, today } = useApp();
 
   const totalReviewTasks = peerEntries.length + entriesAwaitingReflection.length;
+
+  const studyStatus = (() => {
+    if (!today) return null;
+    if (today.not_started) return 'Your study has not started yet';
+    if (today.complete) return 'Study complete — thank you!';
+    return `Day ${today.study_day} of 15 · ${today.condition_label}`;
+  })();
 
   const handleLogout = () => {
     setCurrentUser(null);
@@ -23,7 +30,11 @@ export function MainMenu() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-gray-900">Peer Journal</h1>
-            <p className="text-gray-600 mt-1">What would you like to do?</p>
+            {studyStatus ? (
+              <p className="text-gray-600 mt-1">{studyStatus}</p>
+            ) : (
+              <p className="text-gray-600 mt-1">What would you like to do?</p>
+            )}
           </div>
           <div className="flex gap-2">
             <Dialog>

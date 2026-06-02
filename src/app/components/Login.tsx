@@ -12,7 +12,7 @@ export function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { setCurrentUser, refreshData } = useApp();
+  const { setCurrentUser, refreshData, loadToday } = useApp();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +28,7 @@ export function Login() {
     try {
       await api.login(pin);
       setCurrentUser(pin);
-      await refreshData();
+      await Promise.all([refreshData(), loadToday()]);
       navigate('/menu');
     } catch (err: any) {
       setError(err.message || 'Login failed');
