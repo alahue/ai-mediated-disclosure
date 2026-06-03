@@ -46,15 +46,24 @@ export async function logout() {
   setApiPin(null);
 }
 
+// Study
+export async function getToday() {
+  return request<any>('/study/today');
+}
+
 // Journal Entries
 export async function getEntries() {
   return request<any[]>('/entries');
 }
 
-export async function createEntry(content: string) {
+export async function createEntry(payload: {
+  content: string;
+  write_start_time?: string | null;
+  write_complete_time?: string | null;
+}) {
   return request<any>('/entries', {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -70,46 +79,100 @@ export async function deleteEntry(id: string) {
 }
 
 // Sharing
-export async function mediateEntry(entryId: string, intention: string) {
-  return request<{
-    polished_entry: string;
-    explanation: string;
-    warning: string | null;
-    validation_passed: boolean;
-    validation_issues: string[];
-  }>('/sharing/mediate', {
+export interface MediateResult {
+  polished_entry: string;
+  explanation: string;
+  warning: string | null;
+  validation_passed: boolean;
+  validation_issues: string[];
+}
+
+export async function mediateEntry(params: {
+  entryId: string;
+  intention: string;
+  excerpt: string;
+  regenerate?: boolean;
+}) {
+  return request<MediateResult>('/sharing/mediate', {
     method: 'POST',
-    body: JSON.stringify({ entryId, intention }),
+    body: JSON.stringify(params),
   });
 }
 
-export async function approveSharing(
-  entryId: string,
-  polishedEntry: string,
-  intention: string,
-  explanation?: string,
-  warning?: string | null
-) {
+export async function approveSharing(payload: {
+  entryId: string;
+  intention: string;
+  selected_excerpt: string;
+  final_shared_text: string;
+  ai_action?: string | null;
+  regeneration_count?: number;
+  ai_suggestion?: string | null;
+  explanation?: string | null;
+  warning?: string | null;
+}) {
   return request<{ success: boolean }>('/sharing/approve', {
     method: 'POST',
-    body: JSON.stringify({
-      entryId,
-      polished_entry: polishedEntry,
-      intention,
-      explanation,
-      warning,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function denySharing(entryId: string) {
-  return request<{ success: boolean }>('/sharing/deny', {
+export async function cancelSharing(payload: {
+  entryId: string;
+  intention?: string | null;
+  selected_excerpt?: string | null;
+  ai_action?: string | null;
+  regeneration_count?: number;
+}) {
+  return request<{ success: boolean }>('/sharing/cancel', {
     method: 'POST',
-    body: JSON.stringify({ entryId }),
+    body: JSON.stringify(payload),
   });
 }
 
-// Peers
+// Peer exchanges (rotating dyad routing)
+export interface RespondView {
+  id: string;
+  entry_index: number;
+  shared_text: string;
+  intention: string | null;
+  peer_label: string;
+  already_responded: boolean;
+  what_i_heard: string | null;
+  what_im_wondering: string | null;
+  what_i_suggest: string | null;
+}
+
+export async function claimExchange(entryIndex: number) {
+  return request<{ exchange: RespondView }>('/exchanges/claim', {
+    method: 'POST',
+    body: JSON.stringify({ entry_index: entryIndex }),
+  });
+}
+
+export async function submitExchangeResponse(
+  exchangeId: string,
+  response: { what_i_heard: string; what_im_wondering: string; what_i_suggest: string }
+) {
+  return request<{ success: boolean }>(`/exchanges/${exchangeId}/respond`, {
+    method: 'POST',
+    body: JSON.stringify(response),
+  });
+}
+
+export async function getResponseForEntry(entryId: string) {
+  return request<{
+    exists: boolean;
+    responded: boolean;
+    status?: string;
+    peer_label?: string;
+    intention?: string | null;
+    what_i_heard?: string;
+    what_im_wondering?: string;
+    what_i_suggest?: string;
+  }>(`/exchanges/for-entry/${entryId}`);
+}
+
+// Peers (legacy)
 export async function getPeerEntries() {
   return request<any[]>('/peers');
 }
@@ -188,6 +251,13 @@ export async function adminCreateUser(pin: string) {
 
 export async function adminDeleteUser(pin: string) {
   return adminRequest<{ success: boolean }>(`/users/${pin}`, { method: 'DELETE' });
+}
+
+export async function adminSetStudyDay(pin: string, body: { day?: number; delta?: number }) {
+  return adminRequest<{ success: boolean; current_study_day: number; day_plan: any }>(
+    `/users/${pin}/study-day`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
 }
 
 export async function adminGetUserHistory(pin: string) {

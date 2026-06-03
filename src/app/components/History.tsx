@@ -40,9 +40,9 @@ export function History() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-4xl mx-auto space-y-4">
-        <Button variant="ghost" onClick={() => navigate('/menu')}>
+        <Button variant="ghost" onClick={() => navigate('/today')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Menu
+          Back to Today
         </Button>
 
         <Card>
@@ -70,14 +70,23 @@ export function History() {
                           className="flex-1 min-w-0 cursor-pointer"
                           onClick={() => setSelectedEntry(entry.id)}
                         >
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <div className="text-sm text-gray-500">
                               {formatDate(entry.created_at)}
                             </div>
+                            {entry.study_day != null && (
+                              <Badge variant="outline" className="text-xs">Day {entry.study_day}</Badge>
+                            )}
+                            {entry.condition && (
+                              <Badge variant="outline" className="text-xs capitalize">{entry.condition}</Badge>
+                            )}
+                            {entry.entry_index != null && (
+                              <Badge variant="outline" className="text-xs">Entry {entry.entry_index}</Badge>
+                            )}
                             {entry.shared && (
                               <Badge variant="secondary" className="text-xs">Shared</Badge>
                             )}
-                            {entry.sim_what_i_heard && (
+                            {entry.peer_what_i_heard && (
                               <Badge variant="secondary" className="text-xs">Has Response</Badge>
                             )}
                             {entry.reflection_content && (
@@ -128,6 +137,16 @@ export function History() {
                       minute: '2-digit',
                     })}
                   </div>
+
+                  {/* Prompt */}
+                  {currentEntry.prompt_text && (
+                    <div>
+                      <h3 className="font-semibold mb-2">Prompt</h3>
+                      <div className="p-4 bg-indigo-50 rounded-lg">
+                        <p className="text-sm">{currentEntry.prompt_text}</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Original Entry */}
                   <div>
@@ -183,24 +202,24 @@ export function History() {
                     </>
                   )}
 
-                  {/* Simulated Peer Response */}
-                  {currentEntry.sim_what_i_heard && (
+                  {/* Peer Response */}
+                  {currentEntry.peer_what_i_heard && (
                     <>
                       <Separator />
                       <div>
                         <h3 className="font-semibold mb-2">Peer Response</h3>
                         <div className="p-4 bg-green-50 rounded-lg space-y-3">
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I heard:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_i_heard}</p>
+                            <h4 className="font-medium text-sm mb-1">What they heard:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_i_heard}</p>
                           </div>
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I'm wondering:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_im_wondering}</p>
+                            <h4 className="font-medium text-sm mb-1">What they're wondering:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_im_wondering}</p>
                           </div>
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I suggest:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_i_suggest}</p>
+                            <h4 className="font-medium text-sm mb-1">What they suggest:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_i_suggest}</p>
                           </div>
                         </div>
                       </div>

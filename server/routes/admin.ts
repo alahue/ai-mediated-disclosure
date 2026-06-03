@@ -1,7 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, seedUserData } from '../db.js';
+import { getDb } from '../db.js';
 import { requireAdmin } from '../middleware/admin-auth.js';
+import { logEvent } from '../services/events.js';
+import {
+  assignConditionOrder,
+  encodeConditionOrder,
+  decodeConditionOrder,
+  getDayPlan,
+  TOTAL_STUDY_DAYS,
+} from '../study/config.js';
 
 const router = Router();
 
@@ -31,14 +39,20 @@ router.get('/users', requireAdmin, (_req: Request, res: Response) => {
   const db = getDb();
 
   const users = db.prepare(`
-    SELECT u.pin, u.created_at, u.is_active,
+    SELECT u.pin, u.created_at, u.is_active, u.condition_order, u.current_study_day,
       (SELECT COUNT(*) FROM journal_entries WHERE user_pin = u.pin) as entry_count,
       (SELECT COUNT(*) FROM peer_entries WHERE target_user_pin = u.pin) as peer_entry_count
     FROM users u
     ORDER BY u.created_at DESC
-  `).all();
+  `).all() as any[];
 
-  res.json(users);
+  // Attach the derived current-day plan so the dashboard can show study status.
+  const withPlan = users.map((u) => ({
+    ...u,
+    day_plan: getDayPlan(decodeConditionOrder(u.condition_order), u.current_study_day ?? 0),
+  }));
+
+  res.json(withPlan);
 });
 
 router.post('/users', requireAdmin, (req: Request, res: Response) => {
@@ -58,10 +72,64 @@ router.post('/users', requireAdmin, (req: Request, res: Response) => {
     return;
   }
 
-  db.prepare('INSERT INTO users (pin) VALUES (?)').run(pin);
-  seedUserData(pin);
+  // Assign a counterbalanced condition order in round-robin fashion.
+  const count = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as any).c as number;
+  const order = assignConditionOrder(count);
+  const encoded = encodeConditionOrder(order);
 
-  res.status(201).json({ success: true, pin });
+  db.prepare(
+    'INSERT INTO users (pin, condition_order, current_study_day) VALUES (?, ?, 0)'
+  ).run(pin, encoded);
+
+  logEvent(db, {
+    user_pin: pin,
+    study_day: 0,
+    event_type: 'participant_enrolled',
+    payload: { condition_order: order },
+  });
+
+  res.status(201).json({ success: true, pin, condition_order: order });
+});
+
+// Advance or set a participant's current study day (admin-driven cadence).
+router.post('/users/:pin/study-day', requireAdmin, (req: Request, res: Response) => {
+  const { pin } = req.params;
+  const { day, delta } = req.body;
+
+  const db = getDb();
+  const user = db.prepare('SELECT * FROM users WHERE pin = ?').get(pin) as any;
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+
+  const current = user.current_study_day ?? 0;
+  let target = current;
+  if (typeof day === 'number') {
+    target = day;
+  } else if (typeof delta === 'number') {
+    target = current + delta;
+  } else {
+    res.status(400).json({ error: 'Provide either "day" or "delta" as a number' });
+    return;
+  }
+
+  // Clamp to the valid range [0, TOTAL_STUDY_DAYS + 1]; one past the end marks
+  // the study as complete.
+  target = Math.max(0, Math.min(TOTAL_STUDY_DAYS + 1, Math.round(target)));
+
+  db.prepare('UPDATE users SET current_study_day = ? WHERE pin = ?').run(target, pin);
+
+  const plan = getDayPlan(decodeConditionOrder(user.condition_order), target);
+  logEvent(db, {
+    user_pin: pin,
+    study_day: target,
+    condition: plan.condition,
+    event_type: 'study_day_changed',
+    payload: { from: current, to: target },
+  });
+
+  res.json({ success: true, pin, current_study_day: target, day_plan: plan });
 });
 
 router.delete('/users/:pin', requireAdmin, (req: Request, res: Response) => {
@@ -82,7 +150,7 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
   const { pin } = req.params;
   const db = getDb();
 
-  const user = db.prepare('SELECT * FROM users WHERE pin = ?').get(pin);
+  const user = db.prepare('SELECT * FROM users WHERE pin = ?').get(pin) as any;
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
@@ -90,12 +158,19 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
 
   const journalEntries = db.prepare(`
     SELECT je.*,
-      spr.what_i_heard AS sim_what_i_heard,
-      spr.what_im_wondering AS sim_what_im_wondering,
-      spr.what_i_suggest AS sim_what_i_suggest,
+      p.text AS prompt_text,
+      p.prompt_type AS prompt_type,
+      pe.responder_pin AS peer_responder_pin,
+      pe.what_i_heard AS peer_what_i_heard,
+      pe.what_im_wondering AS peer_what_im_wondering,
+      pe.what_i_suggest AS peer_what_i_suggest,
+      pe.status AS peer_status,
+      pe.responded_at AS peer_responded_at,
+      pe.read_at AS peer_read_at,
       ra.content AS reflection_content
     FROM journal_entries je
-    LEFT JOIN simulated_peer_responses spr ON spr.journal_entry_id = je.id
+    LEFT JOIN prompts p ON p.id = je.prompt_id
+    LEFT JOIN peer_exchanges pe ON pe.entry_id = je.id AND pe.writer_pin = je.user_pin
     LEFT JOIN reflection_addendums ra ON ra.journal_entry_id = je.id
     WHERE je.user_pin = ?
     ORDER BY je.created_at DESC
@@ -111,7 +186,9 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
     ORDER BY pe.created_at DESC
   `).all(pin);
 
-  res.json({ user, journalEntries, peerEntries });
+  const dayPlan = getDayPlan(decodeConditionOrder(user.condition_order), user.current_study_day ?? 0);
+
+  res.json({ user, dayPlan, journalEntries, peerEntries });
 });
 
 router.delete('/entries/:id', requireAdmin, (req: Request, res: Response) => {

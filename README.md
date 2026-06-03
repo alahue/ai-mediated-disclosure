@@ -1,8 +1,78 @@
 # AI Peer Journaling App
 
-An AI-mediated peer journaling platform built for usability study research. Users write journal entries, share them with peers through an AI mediator that redacts personal information and polishes content, respond to peer entries, and reflect on feedback.
+An AI-mediated peer journaling platform for the CHI study **"From Private
+Reflection to AI-Mediated Disclosure."** It is being adapted from a usability
+prototype into an instrumented field-study platform: a 3-week within-subjects
+crossover (private / manual-sharing / AI-mediated conditions), with a matched
+daily writing-prompt schedule, entry-linked behavioral logging, rotating
+anonymous peers, and in-app survey instruments.
 
 The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1kjj7HZQ/AI-Peer-Journaling-App.
+
+## Study platform: build status
+
+The platform is being rebuilt in phases.
+
+**Phase 3 (rotating dyad routing)** is in place:
+
+- **Rotating anonymous peers** — each shared entry is routed to a single
+  different responder, drawn from a pool keyed by condition + entry index. The
+  assignment honors the no-repeat-pairing rule (§5): the same two participants
+  are never paired twice within a condition, so peers rotate across entries.
+- **Structured peer response** — the three-part template (what I heard / am
+  wondering / suggest, with a "No suggestion" option) with lightweight minimum
+  lengths.
+- **Read + social reflection** — the writer reads the peer's response to their
+  own entry (recording the read timestamp) and then reflects.
+- **Missed-response handling** — real peers only, no AI backup: if no response
+  arrives by the read day the task is marked missing; writer data is retained.
+- **Timing logs** — assigned responder, response timestamp, read timestamp, and
+  missed/delayed flags are all logged for analysis.
+
+**Phase 2 (condition workflows & session orchestration)** is in place:
+
+- **Guided "Today" session** — after login, participants land on a daily task
+  checklist (`/today`) that gates each task by status (available / done / locked)
+  and surfaces later-phase tasks (peer exchange, surveys) as upcoming.
+- **Condition-parallel sharing** — the manual and AI social conditions share an
+  identical workflow (intention → select/edit excerpt → preview exactly what the
+  peer sees → approve / edit / cancel). The **AI condition adds only** a mediation
+  review step: an §8-aligned suggested/redacted version, an oversharing warning,
+  an explanation of changes, and a regenerate option. Nothing is shared without
+  explicit approval.
+- **Behavioral disclosure logging** — share/no-share, excerpt length, percentage
+  shared, time-to-share, edit distance (excerpt→final and AI→final), canceled
+  share, AI action, and regeneration count, all recorded to the event log.
+- **Private-condition delayed reflection** — reflect on a prior entry with no peer.
+
+*Deferred to Phase 3* (need a real peer): responding to a peer's entry, reading
+the peer's response to your own entry, and the social reflection-after-response.
+*Phase 4*: the three in-app survey instruments. *Deferred*: AI prompt/model
+freezing. The legacy `/menu` and `/review` screens remain for now.
+
+**Phase 1 (foundations)** is in place:
+
+- **Counterbalanced enrollment** — each participant is assigned one of the six
+  condition orders in round-robin order at creation.
+- **Admin-advanced study day** — the cadence is driven by an admin control
+  (`current_study_day`, 0–15) rather than the real clock, for deterministic
+  piloting; real timestamps are still logged.
+- **Matched prompt schedule** — the three Appendix-A writing prompts, served per
+  entry/condition day.
+- **Real entry authoring** — participants write and save their own entries
+  (sample-entry seeding removed); each entry is linked to its condition,
+  condition order, study day, entry index, prompt, and write start/complete
+  times (§7 data linkage).
+- **Event-log spine** — an append-only `events` table records enrollment,
+  session starts, study-day changes, and entry creation/deletion.
+
+Later phases (not yet built): the three condition workflows with manual/AI
+procedural parity, rotating real-peer routing, the three in-app survey
+instruments (entry experience check, peer response check, end-of-condition
+survey), and de-identified data export. AI prompt/model freezing is deferred.
+
+The legacy Share/Review screens still run on the new schema and will be reworked
+in the condition-workflow phase.
 
 ## Architecture
 
