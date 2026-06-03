@@ -201,8 +201,8 @@ router.get('/export', requireAdmin, (req: Request, res: Response) => {
   const tier = req.query.tier as ExportTier;
   const format = (req.query.format as string) || 'json';
 
-  if (tier !== 'analysis' && tier !== 'coding') {
-    res.status(400).json({ error: 'tier must be "analysis" or "coding"' });
+  if (tier !== 'analysis' && tier !== 'coding' && tier !== 'raw') {
+    res.status(400).json({ error: 'tier must be "analysis", "coding", or "raw"' });
     return;
   }
 

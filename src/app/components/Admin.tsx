@@ -12,6 +12,8 @@ import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus, Download } from 'lucide-reac
 import * as api from '../utils/api';
 
 const ANALYSIS_TABLES = ['participants', 'entries', 'events', 'peer_exchanges', 'survey_responses'];
+const CODING_TABLES = ['entries_for_coding', 'peer_responses_for_coding', 'reflections'];
+const RAW_TABLES = ['participant_map', 'entries', 'peer_exchanges', 'reflections', 'survey_responses'];
 
 function downloadBlob(filename: string, content: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -100,7 +102,7 @@ export function Admin() {
 
   const [exportError, setExportError] = useState('');
 
-  const handleExportJson = async (tier: 'analysis' | 'coding') => {
+  const handleExportJson = async (tier: api.ExportTier) => {
     setExportError('');
     try {
       const bundle = await api.adminExportJson(tier);
@@ -110,7 +112,7 @@ export function Admin() {
     }
   };
 
-  const handleExportCsv = async (tier: 'analysis' | 'coding', table: string) => {
+  const handleExportCsv = async (tier: api.ExportTier, table: string) => {
     setExportError('');
     try {
       const csv = await api.adminExportCsv(tier, table);
@@ -538,18 +540,43 @@ export function Admin() {
             <div>
               <h3 className="font-semibold text-sm mb-1">Blinded coding export</h3>
               <p className="text-xs text-gray-500 mb-3">
-                Original journal entries for reflection-quality coding — condition labels and
-                timestamps stripped, entries shuffled, PII auto-redacted, so coders stay blind to
-                condition.
+                Original journal entries, peer responses, and reflection text for human coding —
+                condition labels and timestamps stripped, rows shuffled, PII auto-redacted, so
+                coders stay blind to condition.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" className="gap-1" onClick={() => handleExportJson('coding')}>
-                  <Download className="w-4 h-4" /> JSON
+                  <Download className="w-4 h-4" /> JSON bundle
                 </Button>
-                <Button size="sm" variant="outline" className="gap-1"
-                  onClick={() => handleExportCsv('coding', 'entries_for_coding')}>
-                  <Download className="w-4 h-4" /> entries_for_coding.csv
+                {CODING_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('coding', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="font-semibold text-sm mb-1 text-red-600">Raw / admin export</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                <strong className="text-red-600">Sensitive — authorized personnel only.</strong>{' '}
+                Includes the PIN ↔ participant-ID mapping and full raw text (entries, shared text,
+                peer responses, reflections). For re-linking data to participants (e.g. deletion
+                requests). Do not share externally.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="destructive" className="gap-1" onClick={() => handleExportJson('raw')}>
+                  <Download className="w-4 h-4" /> JSON bundle
                 </Button>
+                {RAW_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('raw', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
               </div>
             </div>
 

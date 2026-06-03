@@ -9,7 +9,7 @@ export interface Table {
   rows: Array<Record<string, unknown>>;
 }
 export type Bundle = Record<string, Table>;
-export type ExportTier = 'analysis' | 'coding';
+export type ExportTier = 'analysis' | 'coding' | 'raw';
 
 function ms(later: string | null, earlier: string | null): number | null {
   if (!later || !earlier) return null;
@@ -205,19 +205,50 @@ function buildSurveyResponses(db: Database.Database, pinMap: PinMap): Table {
 }
 
 // ---------------------------------------------------------------------------
-// Blinded coding export (original entries, condition/timestamps stripped,
-// PII-redacted, shuffled so coders stay blind to condition)
+// Blinded coding export (original entries, peer responses, and reflections;
+// condition/timestamps stripped, PII-redacted, shuffled)
 // ---------------------------------------------------------------------------
 
 export function buildCodingExport(db: Database.Database): Bundle {
-  const rows = (db.prepare('SELECT id, content FROM journal_entries').all() as any[]).map((e) => ({
+  const pinMap = buildPinMap(db);
+
+  const entries = (db.prepare('SELECT id, content FROM journal_entries').all() as any[]).map((e) => ({
     entry_id: e.id,
     word_count: wordCount(e.content || ''),
     entry_text: redactText(e.content),
   }));
-  shuffle(rows);
+  shuffle(entries);
+
+  // Peer responses for peer-response quality coding (§11): condition-stripped,
+  // keyed only by exchange so coders cannot infer condition or identities.
+  const peerResponses = (
+    db.prepare("SELECT id, what_i_heard, what_im_wondering, what_i_suggest FROM peer_exchanges WHERE status = 'responded'").all() as any[]
+  ).map((x) => ({
+    exchange_id: x.id,
+    what_i_heard: redactText(x.what_i_heard),
+    what_im_wondering: redactText(x.what_im_wondering),
+    what_i_suggest: redactText(x.what_i_suggest),
+  }));
+  shuffle(peerResponses);
+
+  // Reflection addendums (qualitative): de-identified participant ID + redacted
+  // text, keyed by entry so they can be linked to the analysis bundle.
+  const reflections = (
+    db.prepare('SELECT journal_entry_id, user_pin, content FROM reflection_addendums').all() as any[]
+  ).map((r) => ({
+    participant_id: mapPin(pinMap, r.user_pin),
+    entry_id: r.journal_entry_id,
+    reflection_text: redactText(r.content),
+  }));
+  shuffle(reflections);
+
   return {
-    entries_for_coding: { columns: ['entry_id', 'word_count', 'entry_text'], rows },
+    entries_for_coding: { columns: ['entry_id', 'word_count', 'entry_text'], rows: entries },
+    peer_responses_for_coding: {
+      columns: ['exchange_id', 'what_i_heard', 'what_im_wondering', 'what_i_suggest'],
+      rows: peerResponses,
+    },
+    reflections: { columns: ['participant_id', 'entry_id', 'reflection_text'], rows: reflections },
   };
 }
 
@@ -228,8 +259,123 @@ function shuffle<T>(arr: T[]): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Raw / admin export (access-controlled): includes the PIN <-> participant-ID
+// mapping and the full raw text, for re-linking data to participants (e.g.
+// deletion requests). Never share this tier outside authorized personnel.
+// ---------------------------------------------------------------------------
+
+export function buildRawExport(db: Database.Database): Bundle {
+  const pinMap = buildPinMap(db);
+
+  const participantMap: Table = {
+    columns: ['participant_id', 'pin', 'condition_order', 'current_study_day', 'enrolled_at'],
+    rows: (db.prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[]).map((u) => ({
+      participant_id: mapPin(pinMap, u.pin),
+      pin: u.pin,
+      condition_order: u.condition_order,
+      current_study_day: u.current_study_day,
+      enrolled_at: u.created_at,
+    })),
+  };
+
+  const entries: Table = {
+    columns: [
+      'participant_id', 'pin', 'entry_id', 'condition', 'condition_order', 'study_day', 'entry_index',
+      'prompt_id', 'intention', 'selected_excerpt', 'content', 'final_shared_text',
+      'mediator_explanation', 'mediator_warning', 'ai_action', 'share_decision', 'shared', 'shared_at',
+      'write_start_time', 'write_complete_time', 'created_at',
+    ],
+    rows: (db.prepare('SELECT * FROM journal_entries ORDER BY created_at ASC').all() as any[]).map((e) => ({
+      participant_id: mapPin(pinMap, e.user_pin),
+      pin: e.user_pin,
+      entry_id: e.id,
+      condition: e.condition,
+      condition_order: e.condition_order,
+      study_day: e.study_day,
+      entry_index: e.entry_index,
+      prompt_id: e.prompt_id,
+      intention: e.intention,
+      selected_excerpt: e.selected_excerpt,
+      content: e.content,
+      final_shared_text: e.final_shared_text,
+      mediator_explanation: e.mediator_explanation,
+      mediator_warning: e.mediator_warning,
+      ai_action: e.ai_action,
+      share_decision: e.share_decision,
+      shared: e.shared,
+      shared_at: e.shared_at,
+      write_start_time: e.write_start_time,
+      write_complete_time: e.write_complete_time,
+      created_at: e.created_at,
+    })),
+  };
+
+  const peerExchanges: Table = {
+    columns: [
+      'exchange_id', 'condition', 'entry_index', 'writer_id', 'writer_pin', 'responder_id', 'responder_pin',
+      'entry_id', 'status', 'shared_text', 'what_i_heard', 'what_im_wondering', 'what_i_suggest',
+      'assigned_at', 'responded_at', 'read_at', 'created_at',
+    ],
+    rows: (db.prepare('SELECT * FROM peer_exchanges ORDER BY created_at ASC').all() as any[]).map((x) => ({
+      exchange_id: x.id,
+      condition: x.condition,
+      entry_index: x.entry_index,
+      writer_id: mapPin(pinMap, x.writer_pin),
+      writer_pin: x.writer_pin,
+      responder_id: mapPin(pinMap, x.responder_pin),
+      responder_pin: x.responder_pin,
+      entry_id: x.entry_id,
+      status: x.status,
+      shared_text: x.shared_text,
+      what_i_heard: x.what_i_heard,
+      what_im_wondering: x.what_im_wondering,
+      what_i_suggest: x.what_i_suggest,
+      assigned_at: x.assigned_at,
+      responded_at: x.responded_at,
+      read_at: x.read_at,
+      created_at: x.created_at,
+    })),
+  };
+
+  const reflections: Table = {
+    columns: ['participant_id', 'pin', 'entry_id', 'content', 'created_at'],
+    rows: (db.prepare('SELECT * FROM reflection_addendums ORDER BY created_at ASC').all() as any[]).map((r) => ({
+      participant_id: mapPin(pinMap, r.user_pin),
+      pin: r.user_pin,
+      entry_id: r.journal_entry_id,
+      content: r.content,
+      created_at: r.created_at,
+    })),
+  };
+
+  const surveyResponses: Table = {
+    columns: ['participant_id', 'pin', 'survey_type', 'condition', 'entry_id', 'study_day', 'item_key', 'response_value', 'created_at'],
+    rows: (db.prepare('SELECT * FROM survey_responses ORDER BY created_at ASC').all() as any[]).map((s) => ({
+      participant_id: mapPin(pinMap, s.user_pin),
+      pin: s.user_pin,
+      survey_type: s.survey_type,
+      condition: s.condition,
+      entry_id: s.entry_id,
+      study_day: s.study_day,
+      item_key: s.item_key,
+      response_value: s.response_value,
+      created_at: s.created_at,
+    })),
+  };
+
+  return {
+    participant_map: participantMap,
+    entries,
+    peer_exchanges: peerExchanges,
+    reflections,
+    survey_responses: surveyResponses,
+  };
+}
+
 export function buildExport(db: Database.Database, tier: ExportTier): Bundle | null {
   if (tier === 'analysis') return buildAnalysisExport(db);
   if (tier === 'coding') return buildCodingExport(db);
+  if (tier === 'raw') return buildRawExport(db);
   return null;
 }
