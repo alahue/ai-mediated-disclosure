@@ -276,3 +276,32 @@ export async function adminGetUserHistory(pin: string) {
 export async function adminDeleteEntry(id: string) {
   return adminRequest<{ success: boolean }>(`/entries/${id}`, { method: 'DELETE' });
 }
+
+// Data export
+export interface ExportBundle {
+  tier: string;
+  generated_at: string;
+  tables: string[];
+  data: Record<string, any[]>;
+}
+
+export async function adminGetAiConfig() {
+  return adminRequest<Record<string, any>>('/ai-config');
+}
+
+export type ExportTier = 'analysis' | 'coding' | 'raw';
+
+export async function adminExportJson(tier: ExportTier) {
+  return adminRequest<ExportBundle>(`/export?tier=${tier}&format=json`);
+}
+
+export async function adminExportCsv(tier: ExportTier, table: string): Promise<string> {
+  const res = await fetch(`/api/admin/export?tier=${tier}&format=csv&table=${encodeURIComponent(table)}`, {
+    headers: adminToken ? { 'X-Admin-Token': adminToken } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.text();
+}

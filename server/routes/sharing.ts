@@ -5,6 +5,7 @@ import { mediateEntry } from '../services/mediator.js';
 import { validateEntry } from '../services/validator.js';
 import { logEvent } from '../services/events.js';
 import { computeDisclosureMetrics } from '../services/text-metrics.js';
+import { aiConfigStamp } from '../study/ai-config.js';
 
 const router = Router();
 
@@ -52,7 +53,30 @@ router.post('/mediate', async (req: Request, res: Response) => {
     const mediatorResult = await mediateEntry(excerpt, intention);
     const validatorResult = await validateEntry(mediatorResult.polished_entry);
 
-    logEvent(getDb(), {
+    const db = getDb();
+    const stamp = aiConfigStamp();
+
+    // Persist the full mediation I/O (§8). A regeneration supersedes the prior
+    // pending suggestion, which is marked 'regenerated' but kept on record.
+    db.prepare(
+      "UPDATE ai_mediations SET disposition = 'regenerated' WHERE entry_id = ? AND disposition = 'generated'"
+    ).run(entryId);
+    const attemptNo =
+      ((db.prepare('SELECT COUNT(*) AS c FROM ai_mediations WHERE entry_id = ?').get(entryId) as any).c as number) + 1;
+    db.prepare(`
+      INSERT INTO ai_mediations (
+        id, entry_id, user_pin, attempt_no, intention, input_excerpt, suggested_text,
+        explanation, warning, validation_passed, validation_issues,
+        model, config_version, mediator_prompt_version, validator_prompt_version, disposition
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated')
+    `).run(
+      uuidv4(), entryId, userPin, attemptNo, intention, excerpt, mediatorResult.polished_entry,
+      mediatorResult.explanation ?? null, mediatorResult.warning ?? null,
+      validatorResult.passed ? 1 : 0, JSON.stringify(validatorResult.issues || []),
+      stamp.model, stamp.config_version, stamp.mediator_prompt_version, stamp.validator_prompt_version
+    );
+
+    logEvent(db, {
       user_pin: userPin,
       study_day: entry.study_day,
       condition: entry.condition,
@@ -60,9 +84,11 @@ router.post('/mediate', async (req: Request, res: Response) => {
       event_type: regenerate ? 'ai_regenerated' : 'ai_mediation_generated',
       payload: {
         intention,
+        attempt_no: attemptNo,
         excerpt_char_count: excerpt.length,
         had_warning: !!mediatorResult.warning,
         validation_passed: validatorResult.passed,
+        config_version: stamp.config_version,
       },
     });
 
@@ -77,6 +103,12 @@ router.post('/mediate', async (req: Request, res: Response) => {
     console.error('Mediation error:', err);
     // §8 fallback behavior: surface the failure so the participant can retry or
     // proceed manually; never share or fabricate content on failure.
+    if (typeof err?.message === 'string' && err.message.startsWith('blocked_by_safety')) {
+      res.status(422).json({
+        error: 'The AI safety filter declined to process this excerpt. You can edit it to be less sensitive and try again, or share without AI changes.',
+      });
+      return;
+    }
     res.status(502).json({ error: 'The AI mediator is unavailable right now. Please try again, or edit your excerpt and share it without AI changes.' });
   }
 });
@@ -146,6 +178,13 @@ router.post('/approve', (req: Request, res: Response) => {
     userPin
   );
 
+  // Record the participant's disposition on the current AI suggestion (§8).
+  if (isAi) {
+    db.prepare(
+      "UPDATE ai_mediations SET disposition = ?, final_text = ? WHERE entry_id = ? AND disposition = 'generated'"
+    ).run(resolvedAiAction === 'edited' ? 'edited' : 'accepted', final_shared_text, entryId);
+  }
+
   // Create the rotating peer exchange: the approved disclosure now enters the
   // pool to be routed to a single anonymous responder (§5).
   const exchangeId = uuidv4();
@@ -203,6 +242,13 @@ router.post('/cancel', (req: Request, res: Response) => {
     entryId,
     userPin
   );
+
+  // Mark any pending AI suggestion as canceled (kept on record).
+  if (entry.condition === 'ai') {
+    db.prepare(
+      "UPDATE ai_mediations SET disposition = 'canceled' WHERE entry_id = ? AND disposition = 'generated'"
+    ).run(entryId);
+  }
 
   logEvent(db, {
     user_pin: userPin,

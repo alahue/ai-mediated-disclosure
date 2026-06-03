@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AI_CONFIG, SAFETY_SETTINGS } from '../study/ai-config.js';
 
 let genAI: GoogleGenerativeAI;
 
@@ -11,18 +12,43 @@ export function initGemini(): void {
   genAI = new GoogleGenerativeAI(apiKey);
 }
 
+export function getModelId(): string {
+  return AI_CONFIG.model;
+}
+
 export async function generateContent(systemPrompt: string, userPrompt: string): Promise<string> {
   if (!genAI) {
     throw new Error('Gemini API not initialized. Set GEMINI_API_KEY in .env');
   }
 
+  // Model and decoding parameters come from the frozen AI configuration (§8) so
+  // the AI condition behaves identically across the whole data-collection window.
   const model = genAI.getGenerativeModel({
-    model: 'gemini-3-flash-preview',
+    model: AI_CONFIG.model,
     systemInstruction: systemPrompt,
+    generationConfig: {
+      temperature: AI_CONFIG.decoding.temperature,
+      topP: AI_CONFIG.decoding.topP,
+      maxOutputTokens: AI_CONFIG.decoding.maxOutputTokens,
+      responseMimeType: AI_CONFIG.decoding.responseMimeType,
+    },
+    safetySettings: SAFETY_SETTINGS,
   });
 
   const result = await model.generateContent(userPrompt);
   const response = result.response;
+
+  // With strict safety thresholds the model may block the prompt or the
+  // response; surface that distinctly so callers can report it (and not retry).
+  const blockReason = response.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new Error(`blocked_by_safety:prompt:${blockReason}`);
+  }
+  const finish = response.candidates?.[0]?.finishReason;
+  if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
+    throw new Error(`blocked_by_safety:response:${finish}`);
+  }
+
   return response.text();
 }
 
@@ -42,11 +68,17 @@ export function parseJsonResponse<T>(text: string): T {
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Try to extract JSON object from the text
+    // Try to extract a JSON object from the text
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
-      return JSON.parse(match[0]);
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        /* fall through */
+      }
     }
-    throw new Error('Failed to parse JSON from AI response');
+    // Surface a snippet to make truncation/formatting issues diagnosable.
+    const snippet = cleaned.slice(0, 200).replace(/\s+/g, ' ');
+    throw new Error(`Failed to parse JSON from AI response (got ${cleaned.length} chars): ${snippet}…`);
   }
 }

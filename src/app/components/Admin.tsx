@@ -8,8 +8,23 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
-import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus } from 'lucide-react';
+import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus, Download } from 'lucide-react';
 import * as api from '../utils/api';
+
+const ANALYSIS_TABLES = ['ai_config', 'participants', 'entries', 'events', 'peer_exchanges', 'survey_responses', 'ai_mediations'];
+const CODING_TABLES = ['entries_for_coding', 'peer_responses_for_coding', 'reflections'];
+const RAW_TABLES = ['ai_config', 'participant_map', 'entries', 'peer_exchanges', 'reflections', 'survey_responses', 'ai_mediations'];
+
+function downloadBlob(filename: string, content: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 interface UserRow {
   pin: string;
@@ -52,6 +67,7 @@ export function Admin() {
       await api.adminLogin(password);
       setIsLoggedIn(true);
       await loadUsers();
+      api.adminGetAiConfig().then(setAiConfig).catch(() => {});
     } catch (err: any) {
       setLoginError(err.message || 'Login failed');
     }
@@ -82,6 +98,29 @@ export function Admin() {
       setCreateError(err.message || 'Failed to create user');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [exportError, setExportError] = useState('');
+  const [aiConfig, setAiConfig] = useState<Record<string, any> | null>(null);
+
+  const handleExportJson = async (tier: api.ExportTier) => {
+    setExportError('');
+    try {
+      const bundle = await api.adminExportJson(tier);
+      downloadBlob(`${tier}-export.json`, JSON.stringify(bundle, null, 2), 'application/json');
+    } catch (err: any) {
+      setExportError(err.message || 'Export failed');
+    }
+  };
+
+  const handleExportCsv = async (tier: api.ExportTier, table: string) => {
+    setExportError('');
+    try {
+      const csv = await api.adminExportCsv(tier, table);
+      downloadBlob(`${tier}_${table}.csv`, csv, 'text/csv');
+    } catch (err: any) {
+      setExportError(err.message || 'Export failed');
     }
   };
 
@@ -465,6 +504,123 @@ export function Admin() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Frozen AI configuration */}
+        {aiConfig && (
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Configuration (frozen)</CardTitle>
+              <CardDescription>
+                The documented AI-mediator instrument used in the AI condition. Lock these values
+                before data collection; any change should bump the config version.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-gray-500">Model:</span> <span className="font-mono">{aiConfig.model}</span></div>
+                <div><span className="text-gray-500">Config version:</span> <span className="font-mono">{aiConfig.config_version}</span></div>
+                <div><span className="text-gray-500">Locked:</span> {aiConfig.locked_at}</div>
+                <div><span className="text-gray-500">Temperature:</span> {aiConfig.temperature}</div>
+                <div><span className="text-gray-500">top_p:</span> {aiConfig.top_p}</div>
+                <div><span className="text-gray-500">Max output tokens:</span> {aiConfig.max_output_tokens}</div>
+                <div><span className="text-gray-500">Safety:</span> {aiConfig.safety}</div>
+                <div><span className="text-gray-500">Prompts:</span> {aiConfig.mediator_prompt_version} / {aiConfig.validator_prompt_version}</div>
+              </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-indigo-600">View mediator &amp; validator prompts</summary>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <p className="font-medium text-xs uppercase tracking-wide text-gray-500 mb-1">Mediator system prompt</p>
+                    <pre className="whitespace-pre-wrap bg-gray-50 p-3 rounded text-xs">{aiConfig.mediator_system_prompt}</pre>
+                  </div>
+                  <div>
+                    <p className="font-medium text-xs uppercase tracking-wide text-gray-500 mb-1">Validator system prompt</p>
+                    <pre className="whitespace-pre-wrap bg-gray-50 p-3 rounded text-xs">{aiConfig.validator_system_prompt}</pre>
+                  </div>
+                </div>
+              </details>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Data Export */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Export</CardTitle>
+            <CardDescription>
+              De-identified exports for analysis. Participant PINs are replaced with pseudonymous
+              IDs and free text is auto-redacted for obvious identifiers — human review is still
+              required before sharing any export externally.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-sm mb-1">Analysis bundle</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Pseudonymous IDs, behavioral/event logs, peer-exchange timing, and survey responses
+                (long format). No raw journal text.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" className="gap-1" onClick={() => handleExportJson('analysis')}>
+                  <Download className="w-4 h-4" /> JSON bundle
+                </Button>
+                {ANALYSIS_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('analysis', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="font-semibold text-sm mb-1">Blinded coding export</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Original journal entries, peer responses, and reflection text for human coding —
+                condition labels and timestamps stripped, rows shuffled, PII auto-redacted, so
+                coders stay blind to condition.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" className="gap-1" onClick={() => handleExportJson('coding')}>
+                  <Download className="w-4 h-4" /> JSON bundle
+                </Button>
+                {CODING_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('coding', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="font-semibold text-sm mb-1 text-red-600">Raw / admin export</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                <strong className="text-red-600">Sensitive — authorized personnel only.</strong>{' '}
+                Includes the PIN ↔ participant-ID mapping and full raw text (entries, shared text,
+                peer responses, reflections). For re-linking data to participants (e.g. deletion
+                requests). Do not share externally.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="destructive" className="gap-1" onClick={() => handleExportJson('raw')}>
+                  <Download className="w-4 h-4" /> JSON bundle
+                </Button>
+                {RAW_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('raw', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {exportError && <p className="text-sm text-red-500">{exportError}</p>}
           </CardContent>
         </Card>
 

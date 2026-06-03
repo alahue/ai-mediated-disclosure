@@ -101,6 +101,31 @@ function createTables(): void {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    -- Full AI mediation I/O log (§8): one row per model call, including
+    -- regenerated and rejected suggestions, stamped with the frozen AI config.
+    CREATE TABLE IF NOT EXISTS ai_mediations (
+      id TEXT PRIMARY KEY,
+      entry_id TEXT NOT NULL,
+      user_pin TEXT NOT NULL,
+      attempt_no INTEGER NOT NULL,
+      intention TEXT,
+      input_excerpt TEXT,
+      suggested_text TEXT,
+      explanation TEXT,
+      warning TEXT,
+      validation_passed INTEGER,
+      validation_issues TEXT,
+      model TEXT,
+      config_version TEXT,
+      mediator_prompt_version TEXT,
+      validator_prompt_version TEXT,
+      disposition TEXT NOT NULL DEFAULT 'generated', -- generated|regenerated|accepted|edited|rejected|canceled
+      final_text TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_pin) REFERENCES users(pin) ON DELETE CASCADE
+    );
+
     -- Entry-/condition-linked survey responses (instruments wired in Phase 4).
     CREATE TABLE IF NOT EXISTS survey_responses (
       id TEXT PRIMARY KEY,
@@ -193,6 +218,7 @@ function createTables(): void {
     CREATE INDEX IF NOT EXISTS idx_exchanges_writer ON peer_exchanges(writer_pin);
     CREATE INDEX IF NOT EXISTS idx_exchanges_responder ON peer_exchanges(responder_pin);
     CREATE INDEX IF NOT EXISTS idx_exchanges_pool ON peer_exchanges(condition, entry_index, status);
+    CREATE INDEX IF NOT EXISTS idx_ai_mediations_entry ON ai_mediations(entry_id);
   `);
 }
 
