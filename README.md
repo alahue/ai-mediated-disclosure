@@ -1,6 +1,6 @@
 # AI Peer Journaling App
 
-An AI-mediated peer journaling platform for the CHI study **"From Private
+An AI-mediated peer journaling platform for the study **"From Private
 Reflection to AI-Mediated Disclosure."** It is being adapted from a usability
 prototype into an instrumented field-study platform: a 3-week within-subjects
 crossover (private / manual-sharing / AI-mediated conditions), with a matched
