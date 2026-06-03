@@ -172,26 +172,35 @@ export async function getResponseForEntry(entryId: string) {
   }>(`/exchanges/for-entry/${entryId}`);
 }
 
-// Peers (legacy)
-export async function getPeerEntries() {
-  return request<any[]>('/peers');
+// Surveys
+export interface SurveyDefinition {
+  survey_type: 'entry_experience' | 'peer_response' | 'condition';
+  condition: string;
+  title: string;
+  instructions: string;
+  scale: { value: number; label: string }[];
+  items: { key: string; text: string; reverse?: boolean }[];
+  submitted: boolean;
 }
 
-export async function submitPeerResponse(
-  peerEntryId: string,
-  response: { what_i_heard: string; what_im_wondering: string; what_i_suggest: string }
-) {
-  return request<{ success: boolean }>(`/peers/${peerEntryId}/respond`, {
+export async function getSurveyDefinition(type: string, entryId?: string | null) {
+  const q = new URLSearchParams({ type });
+  if (entryId) q.set('entry_id', entryId);
+  return request<SurveyDefinition>(`/surveys/definition?${q.toString()}`);
+}
+
+export async function submitSurvey(payload: {
+  survey_type: string;
+  entry_id?: string | null;
+  responses: Record<string, number>;
+}) {
+  return request<{ success: boolean }>('/surveys/submit', {
     method: 'POST',
-    body: JSON.stringify(response),
+    body: JSON.stringify(payload),
   });
 }
 
 // Reflections
-export async function getPendingReflections() {
-  return request<any[]>('/reflections/pending');
-}
-
 export async function submitReflection(journalEntryId: string, content: string) {
   return request<{ success: boolean }>('/reflections', {
     method: 'POST',

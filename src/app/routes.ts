@@ -6,7 +6,7 @@ import { History } from "./components/History";
 import { Share } from "./components/Share";
 import { Respond } from "./components/Respond";
 import { ReadResponse } from "./components/ReadResponse";
-import { Review } from "./components/Review";
+import { Survey } from "./components/Survey";
 import { Admin } from "./components/Admin";
 
 export const router = createBrowserRouter([
@@ -44,8 +44,8 @@ export const router = createBrowserRouter([
     Component: ReadResponse,
   },
   {
-    path: "/review",
-    Component: Review,
+    path: "/survey",
+    Component: Survey,
   },
   {
     path: "/admin",
