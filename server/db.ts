@@ -147,6 +147,30 @@ function createTables(): void {
       FOREIGN KEY (journal_entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE
     );
 
+    -- Rotating peer exchanges (§5, §11). One row per shared entry: the writer's
+    -- approved disclosure is routed to a single rotating anonymous responder.
+    -- Holds the assignment, the structured response, and response/read timing.
+    CREATE TABLE IF NOT EXISTS peer_exchanges (
+      id TEXT PRIMARY KEY,
+      condition TEXT NOT NULL,
+      entry_index INTEGER NOT NULL,
+      writer_pin TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      shared_text TEXT NOT NULL,
+      intention TEXT,
+      responder_pin TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', -- pending | assigned | responded | missed
+      what_i_heard TEXT,
+      what_im_wondering TEXT,
+      what_i_suggest TEXT,
+      assigned_at TEXT,
+      responded_at TEXT,
+      read_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (writer_pin) REFERENCES users(pin) ON DELETE CASCADE,
+      FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS reflection_addendums (
       id TEXT PRIMARY KEY,
       journal_entry_id TEXT NOT NULL,
@@ -166,6 +190,9 @@ function createTables(): void {
     CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_pin);
     CREATE INDEX IF NOT EXISTS idx_events_entry ON events(entry_id);
     CREATE INDEX IF NOT EXISTS idx_journal_user ON journal_entries(user_pin);
+    CREATE INDEX IF NOT EXISTS idx_exchanges_writer ON peer_exchanges(writer_pin);
+    CREATE INDEX IF NOT EXISTS idx_exchanges_responder ON peer_exchanges(responder_pin);
+    CREATE INDEX IF NOT EXISTS idx_exchanges_pool ON peer_exchanges(condition, entry_index, status);
   `);
 }
 

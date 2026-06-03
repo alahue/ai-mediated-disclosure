@@ -6,29 +6,85 @@ import { decodeConditionOrder, getDayPlan, type DayTask } from '../study/config.
 
 const router = Router();
 
-type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming';
+type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming' | 'waiting' | 'missed';
 
-// Compute the status of a day task from the participant's stored state. Tasks
-// from build phases not yet implemented (peer exchange = 3, surveys = 4) are
-// surfaced as "upcoming" so participants see the full shape of the day.
-function statusForTask(
-  task: DayTask,
-  entry: any | undefined,
-  hasReflection: boolean
-): TaskStatus {
+interface TodayContext {
+  studyDay: number;
+  entriesByIndex: Record<number, any>; // own focal entries this condition
+  reflectedEntryIds: Set<string>;
+  exchangesByEntryId: Record<string, any>; // exchanges where participant is writer
+  myResponderExchangesBySlot: Record<number, any>; // exchanges where participant responds
+  eligiblePendingBySlot: Record<number, boolean>; // a peer entry is available to respond to
+}
+
+// Compute the status of a day task from the participant's stored state. Survey
+// tasks (phase 4) are surfaced as "upcoming".
+function statusForTask(task: DayTask, ctx: TodayContext): TaskStatus {
   switch (task.type) {
     case 'write':
-      return entry ? 'done' : 'available';
-    case 'share':
+      return ctx.entriesByIndex[task.entry_index as number] ? 'done' : 'available';
+
+    case 'share': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
       if (!entry) return 'locked';
       return entry.share_decision ? 'done' : 'available';
-    case 'reflect_private':
+    }
+
+    case 'reflect_private': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
       if (!entry) return 'locked';
-      return hasReflection ? 'done' : 'available';
+      return ctx.reflectedEntryIds.has(entry.id) ? 'done' : 'available';
+    }
+
+    case 'respond_peer': {
+      const slot = task.entry_index as number;
+      const mine = ctx.myResponderExchangesBySlot[slot];
+      if (mine) return mine.responded_at ? 'done' : 'available';
+      return ctx.eligiblePendingBySlot[slot] ? 'available' : 'waiting';
+    }
+
+    case 'read_response': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
+      if (!entry) return 'missed'; // entry was never shared (e.g. canceled)
+      const ex = ctx.exchangesByEntryId[entry.id];
+      if (!ex) return 'missed';
+      if (ex.responded_at) return ex.read_at ? 'done' : 'available';
+      // No response yet: still time on the read day, missed once past it.
+      const readDay = (entry.study_day as number) + 2;
+      return ctx.studyDay > readDay ? 'missed' : 'waiting';
+    }
+
+    case 'reflect_social': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
+      if (!entry) return 'locked';
+      if (ctx.reflectedEntryIds.has(entry.id)) return 'done';
+      const ex = ctx.exchangesByEntryId[entry.id];
+      // Reflection comes after reading the peer response.
+      return ex && ex.read_at ? 'available' : 'locked';
+    }
+
     default:
-      // respond_peer, read_response, reflect_social, surveys — later phases.
-      return 'upcoming';
+      return 'upcoming'; // surveys (phase 4)
   }
+}
+
+// Whether a pending peer entry exists that this participant may respond to for a
+// given slot, honoring the no-repeat-pairing rule (§5).
+function hasEligiblePending(db: any, condition: string, entryIndex: number, responderPin: string): boolean {
+  const row = db
+    .prepare(
+      `SELECT 1 FROM peer_exchanges pe
+       WHERE pe.condition = ? AND pe.entry_index = ? AND pe.responder_pin IS NULL
+         AND pe.status = 'pending' AND pe.writer_pin != ?
+         AND pe.writer_pin NOT IN (
+           SELECT writer_pin FROM peer_exchanges WHERE condition = ? AND responder_pin = ?
+           UNION
+           SELECT responder_pin FROM peer_exchanges WHERE condition = ? AND writer_pin = ? AND responder_pin IS NOT NULL
+         )
+       LIMIT 1`
+    )
+    .get(condition, entryIndex, responderPin, condition, responderPin, condition, responderPin);
+  return !!row;
 }
 
 // Returns the participant's current study-day experience: the day plan, the
@@ -49,10 +105,12 @@ router.get('/today', (req: Request, res: Response) => {
   const studyDay = user.current_study_day ?? 0;
   const plan = getDayPlan(order, studyDay);
 
-  // Entries for the current condition, keyed by focal entry index, plus the set
-  // of entries that already have a reflection addendum.
   const entriesByIndex: Record<number, any> = {};
+  const exchangesByEntryId: Record<string, any> = {};
+  const myResponderExchangesBySlot: Record<number, any> = {};
+  const eligiblePendingBySlot: Record<number, boolean> = {};
   let todaysEntry: any = null;
+
   if (plan.in_study && plan.condition) {
     const entries = db
       .prepare('SELECT * FROM journal_entries WHERE user_pin = ? AND condition = ?')
@@ -63,6 +121,27 @@ router.get('/today', (req: Request, res: Response) => {
     if (plan.writing_entry_index) {
       todaysEntry = entriesByIndex[plan.writing_entry_index] || null;
     }
+
+    if (plan.is_social) {
+      const asWriter = db
+        .prepare('SELECT * FROM peer_exchanges WHERE writer_pin = ? AND condition = ?')
+        .all(userPin, plan.condition) as any[];
+      for (const ex of asWriter) exchangesByEntryId[ex.entry_id] = ex;
+
+      const asResponder = db
+        .prepare('SELECT * FROM peer_exchanges WHERE responder_pin = ? AND condition = ?')
+        .all(userPin, plan.condition) as any[];
+      for (const ex of asResponder) myResponderExchangesBySlot[ex.entry_index] = ex;
+
+      // Pre-compute respond eligibility for the slots that appear today.
+      for (const task of plan.tasks) {
+        if (task.type === 'respond_peer' && task.entry_index != null) {
+          eligiblePendingBySlot[task.entry_index] = hasEligiblePending(
+            db, plan.condition, task.entry_index, userPin
+          );
+        }
+      }
+    }
   }
 
   const reflectedEntryIds = new Set(
@@ -70,13 +149,21 @@ router.get('/today', (req: Request, res: Response) => {
       .map((r) => r.journal_entry_id)
   );
 
+  const ctx: TodayContext = {
+    studyDay,
+    entriesByIndex,
+    reflectedEntryIds,
+    exchangesByEntryId,
+    myResponderExchangesBySlot,
+    eligiblePendingBySlot,
+  };
+
   const tasks = plan.tasks.map((task) => {
-    const entry = task.entry_index != null ? entriesByIndex[task.entry_index] : undefined;
-    return {
-      ...task,
-      entry_id: entry ? entry.id : null,
-      status: statusForTask(task, entry, entry ? reflectedEntryIds.has(entry.id) : false),
-    };
+    // For read/reflect-social the entry referenced is the participant's own
+    // focal entry; for respond it's a slot, with no own entry to link.
+    const ownEntry = task.entry_index != null ? entriesByIndex[task.entry_index] : undefined;
+    const entryId = task.type === 'respond_peer' ? null : ownEntry ? ownEntry.id : null;
+    return { ...task, entry_id: entryId, status: statusForTask(task, ctx) };
   });
 
   // Record a session for this study day (idempotent) and log the visit once.

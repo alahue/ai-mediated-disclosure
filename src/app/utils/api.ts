@@ -129,7 +129,50 @@ export async function cancelSharing(payload: {
   });
 }
 
-// Peers
+// Peer exchanges (rotating dyad routing)
+export interface RespondView {
+  id: string;
+  entry_index: number;
+  shared_text: string;
+  intention: string | null;
+  peer_label: string;
+  already_responded: boolean;
+  what_i_heard: string | null;
+  what_im_wondering: string | null;
+  what_i_suggest: string | null;
+}
+
+export async function claimExchange(entryIndex: number) {
+  return request<{ exchange: RespondView }>('/exchanges/claim', {
+    method: 'POST',
+    body: JSON.stringify({ entry_index: entryIndex }),
+  });
+}
+
+export async function submitExchangeResponse(
+  exchangeId: string,
+  response: { what_i_heard: string; what_im_wondering: string; what_i_suggest: string }
+) {
+  return request<{ success: boolean }>(`/exchanges/${exchangeId}/respond`, {
+    method: 'POST',
+    body: JSON.stringify(response),
+  });
+}
+
+export async function getResponseForEntry(entryId: string) {
+  return request<{
+    exists: boolean;
+    responded: boolean;
+    status?: string;
+    peer_label?: string;
+    intention?: string | null;
+    what_i_heard?: string;
+    what_im_wondering?: string;
+    what_i_suggest?: string;
+  }>(`/exchanges/for-entry/${entryId}`);
+}
+
+// Peers (legacy)
 export async function getPeerEntries() {
   return request<any[]>('/peers');
 }

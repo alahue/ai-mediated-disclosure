@@ -13,6 +13,22 @@ The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1
 
 The platform is being rebuilt in phases.
 
+**Phase 3 (rotating dyad routing)** is in place:
+
+- **Rotating anonymous peers** — each shared entry is routed to a single
+  different responder, drawn from a pool keyed by condition + entry index. The
+  assignment honors the no-repeat-pairing rule (§5): the same two participants
+  are never paired twice within a condition, so peers rotate across entries.
+- **Structured peer response** — the three-part template (what I heard / am
+  wondering / suggest, with a "No suggestion" option) with lightweight minimum
+  lengths.
+- **Read + social reflection** — the writer reads the peer's response to their
+  own entry (recording the read timestamp) and then reflects.
+- **Missed-response handling** — real peers only, no AI backup: if no response
+  arrives by the read day the task is marked missing; writer data is retained.
+- **Timing logs** — assigned responder, response timestamp, read timestamp, and
+  missed/delayed flags are all logged for analysis.
+
 **Phase 2 (condition workflows & session orchestration)** is in place:
 
 - **Guided "Today" session** — after login, participants land on a daily task

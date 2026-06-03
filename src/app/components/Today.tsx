@@ -118,6 +118,8 @@ export function Today() {
                   onWrite={() => navigate('/write')}
                   onShare={() => task.entry_id && navigate(`/share?entryId=${task.entry_id}`)}
                   onReflect={() => task.entry_id && setReflectEntryId(task.entry_id)}
+                  onRespond={() => navigate(`/respond?slot=${task.entry_index}`)}
+                  onRead={() => task.entry_id && navigate(`/read?entryId=${task.entry_id}`)}
                 />
               ))}
             </ul>
@@ -143,24 +145,41 @@ function TaskRow({
   onWrite,
   onShare,
   onReflect,
+  onRespond,
+  onRead,
 }: {
   task: DayTask;
   onWrite: () => void;
   onShare: () => void;
   onReflect: () => void;
+  onRespond: () => void;
+  onRead: () => void;
 }) {
   const done = task.status === 'done';
   const locked = task.status === 'locked';
   const upcoming = task.status === 'upcoming';
+  const waiting = task.status === 'waiting';
+  const missed = task.status === 'missed';
   const available = task.status === 'available';
+  const muted = upcoming || locked || waiting || missed;
 
   const leftIcon = done ? (
     <CheckCircle2 className="w-5 h-5 text-green-600" />
-  ) : locked || upcoming ? (
+  ) : muted ? (
     <Lock className="w-5 h-5 text-gray-300" />
   ) : (
     <Circle className="w-5 h-5 text-indigo-400" />
   );
+
+  const note = (() => {
+    if (upcoming) return 'Available in a later part of the study';
+    if (waiting) return task.type === 'respond_peer'
+      ? 'No peer entry is available to respond to yet'
+      : "Waiting for your peer's response";
+    if (missed) return 'No peer response was received in time';
+    if (locked) return 'Complete the earlier step first';
+    return null;
+  })();
 
   const action = (() => {
     if (!available) return null;
@@ -175,7 +194,12 @@ function TaskRow({
           </Button>
         );
       case 'reflect_private':
+      case 'reflect_social':
         return <Button size="sm" variant="outline" onClick={onReflect}>Reflect</Button>;
+      case 'respond_peer':
+        return <Button size="sm" onClick={onRespond}>Respond</Button>;
+      case 'read_response':
+        return <Button size="sm" onClick={onRead}>Read response</Button>;
       default:
         return null;
     }
@@ -184,7 +208,7 @@ function TaskRow({
   return (
     <li
       className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
-        upcoming || locked ? 'bg-gray-50 opacity-70' : 'bg-white'
+        muted ? 'bg-gray-50 opacity-70' : 'bg-white'
       }`}
     >
       <div className="flex items-center gap-3 min-w-0">
@@ -194,8 +218,7 @@ function TaskRow({
           <p className={`text-sm ${done ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
             {task.label}
           </p>
-          {upcoming && <p className="text-xs text-gray-400">Available in a later part of the study</p>}
-          {locked && <p className="text-xs text-gray-400">Complete the earlier step first</p>}
+          {note && <p className="text-xs text-gray-400">{note}</p>}
         </div>
       </div>
       <div className="flex-shrink-0">{action}</div>

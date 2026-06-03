@@ -14,7 +14,7 @@ export type TaskType =
   | 'survey_peer_response'
   | 'survey_condition';
 
-export type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming';
+export type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming' | 'waiting' | 'missed';
 
 export interface DayTask {
   key: string;

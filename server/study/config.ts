@@ -193,13 +193,16 @@ function tasksForDay(condition: Condition, conditionDay: number): DayTask[] {
     });
   }
 
-  // Responding to a (different) peer's shared entry on social days 2-4.
+  // Responding to a (different) peer's shared entry on social days 2-4. The
+  // entry_index here is the *peer's* entry index being responded to (E1 on day
+  // 2, E2 on day 3, E3 on day 4), used to draw from the matching rotation pool.
   if (social && conditionDay >= 2 && conditionDay <= 4) {
+    const respondSlot = conditionDay - 1;
     tasks.push({
-      key: `respond-${conditionDay}`,
+      key: `respond-${respondSlot}`,
       type: 'respond_peer',
       label: `Respond to a peer's entry`,
-      entry_index: null,
+      entry_index: respondSlot,
       phase: 3,
     });
   }

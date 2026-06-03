@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { mediateEntry } from '../services/mediator.js';
 import { validateEntry } from '../services/validator.js';
@@ -145,6 +146,14 @@ router.post('/approve', (req: Request, res: Response) => {
     userPin
   );
 
+  // Create the rotating peer exchange: the approved disclosure now enters the
+  // pool to be routed to a single anonymous responder (§5).
+  const exchangeId = uuidv4();
+  db.prepare(`
+    INSERT INTO peer_exchanges (id, condition, entry_index, writer_pin, entry_id, shared_text, intention, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+  `).run(exchangeId, entry.condition, entry.entry_index, userPin, entryId, final_shared_text, intention);
+
   logEvent(db, {
     user_pin: userPin,
     study_day: entry.study_day,
@@ -157,6 +166,7 @@ router.post('/approve', (req: Request, res: Response) => {
       ai_action: resolvedAiAction,
       regeneration_count: isAi ? (regeneration_count ?? 0) : null,
       time_to_share_ms: timeToShareMs,
+      exchange_id: exchangeId,
       ...metrics,
     },
   });
