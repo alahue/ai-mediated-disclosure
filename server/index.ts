@@ -12,6 +12,7 @@ import reflectionsRoutes from './routes/reflections.js';
 import adminRoutes from './routes/admin.js';
 import studyRoutes from './routes/study.js';
 import exchangesRoutes from './routes/exchanges.js';
+import surveysRoutes from './routes/surveys.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -35,6 +36,7 @@ app.use('/api/entries', requirePin, entriesRoutes);
 app.use('/api/sharing', requirePin, sharingRoutes);
 app.use('/api/peers', requirePin, peersRoutes);
 app.use('/api/exchanges', requirePin, exchangesRoutes);
+app.use('/api/surveys', requirePin, surveysRoutes);
 app.use('/api/reflections', requirePin, reflectionsRoutes);
 
 app.listen(PORT, () => {

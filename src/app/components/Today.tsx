@@ -12,6 +12,19 @@ import {
 import { useApp, type DayTask } from '../context/AppContext';
 import * as api from '../utils/api';
 
+const SURVEY_TYPE_BY_TASK: Record<string, string> = {
+  survey_entry_experience: 'entry_experience',
+  survey_peer_response: 'peer_response',
+  survey_condition: 'condition',
+};
+
+function surveyHref(task: DayTask): string {
+  const type = SURVEY_TYPE_BY_TASK[task.type];
+  const q = new URLSearchParams({ type });
+  if (task.entry_id) q.set('entryId', task.entry_id);
+  return `/survey?${q.toString()}`;
+}
+
 const TASK_ICON: Record<string, React.ReactNode> = {
   write: <PenLine className="w-5 h-5" />,
   share: <Share2 className="w-5 h-5" />,
@@ -120,6 +133,7 @@ export function Today() {
                   onReflect={() => task.entry_id && setReflectEntryId(task.entry_id)}
                   onRespond={() => navigate(`/respond?slot=${task.entry_index}`)}
                   onRead={() => task.entry_id && navigate(`/read?entryId=${task.entry_id}`)}
+                  onSurvey={() => navigate(surveyHref(task))}
                 />
               ))}
             </ul>
@@ -147,6 +161,7 @@ function TaskRow({
   onReflect,
   onRespond,
   onRead,
+  onSurvey,
 }: {
   task: DayTask;
   onWrite: () => void;
@@ -154,6 +169,7 @@ function TaskRow({
   onReflect: () => void;
   onRespond: () => void;
   onRead: () => void;
+  onSurvey: () => void;
 }) {
   const done = task.status === 'done';
   const locked = task.status === 'locked';
@@ -205,6 +221,10 @@ function TaskRow({
         return <Button size="sm" onClick={onRespond}>Respond</Button>;
       case 'read_response':
         return <Button size="sm" onClick={onRead}>Read response</Button>;
+      case 'survey_entry_experience':
+      case 'survey_peer_response':
+      case 'survey_condition':
+        return <Button size="sm" variant="outline" onClick={onSurvey}>Start survey</Button>;
       default:
         return null;
     }

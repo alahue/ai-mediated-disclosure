@@ -10,11 +10,16 @@ type TaskStatus = 'available' | 'done' | 'locked' | 'upcoming' | 'waiting' | 'mi
 
 interface TodayContext {
   studyDay: number;
+  condition: string | null;
+  isSocial: boolean;
   entriesByIndex: Record<number, any>; // own focal entries this condition
   reflectedEntryIds: Set<string>;
   exchangesByEntryId: Record<string, any>; // exchanges where participant is writer
   myResponderExchangesBySlot: Record<number, any>; // exchanges where participant responds
   eligiblePendingBySlot: Record<number, boolean>; // a peer entry is available to respond to
+  entryExperienceDone: Set<string>; // entry_ids with a submitted entry experience check
+  peerResponseDone: Set<string>; // entry_ids with a submitted peer response check
+  conditionSurveyDone: Set<string>; // conditions with a submitted end-of-condition survey
 }
 
 // Compute the status of a day task from the participant's stored state. Survey
@@ -63,8 +68,31 @@ function statusForTask(task: DayTask, ctx: TodayContext): TaskStatus {
       return ex && ex.read_at ? 'available' : 'locked';
     }
 
+    case 'survey_entry_experience': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
+      if (!entry) return 'locked';
+      // Fires after the writing + disclosure decision: a share/cancel decision
+      // in the social conditions, or simply writing in the private condition.
+      const precondition = ctx.isSocial ? !!entry.share_decision : true;
+      if (!precondition) return 'locked';
+      return ctx.entryExperienceDone.has(entry.id) ? 'done' : 'available';
+    }
+
+    case 'survey_peer_response': {
+      const entry = ctx.entriesByIndex[task.entry_index as number];
+      if (!entry) return 'missed';
+      if (ctx.peerResponseDone.has(entry.id)) return 'done';
+      const ex = ctx.exchangesByEntryId[entry.id];
+      if (ex && ex.read_at) return 'available'; // fires after reading the response
+      const readDay = (entry.study_day as number) + 2;
+      return ctx.studyDay > readDay ? 'missed' : 'waiting';
+    }
+
+    case 'survey_condition':
+      return ctx.condition && ctx.conditionSurveyDone.has(ctx.condition) ? 'done' : 'available';
+
     default:
-      return 'upcoming'; // surveys (phase 4)
+      return 'upcoming';
   }
 }
 
@@ -149,13 +177,30 @@ router.get('/today', (req: Request, res: Response) => {
       .map((r) => r.journal_entry_id)
   );
 
+  const surveyRows = db
+    .prepare('SELECT DISTINCT survey_type, entry_id, condition FROM survey_responses WHERE user_pin = ?')
+    .all(userPin) as any[];
+  const entryExperienceDone = new Set<string>();
+  const peerResponseDone = new Set<string>();
+  const conditionSurveyDone = new Set<string>();
+  for (const r of surveyRows) {
+    if (r.survey_type === 'entry_experience' && r.entry_id) entryExperienceDone.add(r.entry_id);
+    else if (r.survey_type === 'peer_response' && r.entry_id) peerResponseDone.add(r.entry_id);
+    else if (r.survey_type === 'condition' && r.condition) conditionSurveyDone.add(r.condition);
+  }
+
   const ctx: TodayContext = {
     studyDay,
+    condition: plan.condition,
+    isSocial: plan.is_social,
     entriesByIndex,
     reflectedEntryIds,
     exchangesByEntryId,
     myResponderExchangesBySlot,
     eligiblePendingBySlot,
+    entryExperienceDone,
+    peerResponseDone,
+    conditionSurveyDone,
   };
 
   const tasks = plan.tasks.map((task) => {

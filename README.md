@@ -13,6 +13,21 @@ The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1
 
 The platform is being rebuilt in phases.
 
+**Phase 4 (in-app surveys)** is in place:
+
+- **Three instruments**, with items transcribed verbatim from the study survey
+  documents and presented on a 5-point Likert scale:
+  - **Entry experience check** — condition-specific (private/manual/AI), fires
+    after writing and the privacy/sharing decision, before any peer response.
+  - **Peer response check** — social conditions only, fires when the writer
+    reads the peer response to their own entry.
+  - **End-of-condition survey** — C-items always; S-items in the social
+    conditions; AI-mediator items in the AI condition only.
+- **Right-moment gating** via the Today flow, and one response row per item
+  stored in `survey_responses` with a `survey_submitted` event.
+- Legacy `/menu` and `/review` screens removed; the guided Today flow is the
+  single participant hub.
+
 **Phase 3 (rotating dyad routing)** is in place:
 
 - **Rotating anonymous peers** — each shared entry is routed to a single
