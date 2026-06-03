@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AI_CONFIG } from '../study/ai-config.js';
+import { AI_CONFIG, SAFETY_SETTINGS } from '../study/ai-config.js';
 
 let genAI: GoogleGenerativeAI;
 
@@ -32,10 +32,23 @@ export async function generateContent(systemPrompt: string, userPrompt: string):
       maxOutputTokens: AI_CONFIG.decoding.maxOutputTokens,
       responseMimeType: AI_CONFIG.decoding.responseMimeType,
     },
+    safetySettings: SAFETY_SETTINGS,
   });
 
   const result = await model.generateContent(userPrompt);
   const response = result.response;
+
+  // With strict safety thresholds the model may block the prompt or the
+  // response; surface that distinctly so callers can report it (and not retry).
+  const blockReason = response.promptFeedback?.blockReason;
+  if (blockReason) {
+    throw new Error(`blocked_by_safety:prompt:${blockReason}`);
+  }
+  const finish = response.candidates?.[0]?.finishReason;
+  if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
+    throw new Error(`blocked_by_safety:response:${finish}`);
+  }
+
   return response.text();
 }
 

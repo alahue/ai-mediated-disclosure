@@ -103,6 +103,12 @@ router.post('/mediate', async (req: Request, res: Response) => {
     console.error('Mediation error:', err);
     // §8 fallback behavior: surface the failure so the participant can retry or
     // proceed manually; never share or fabricate content on failure.
+    if (typeof err?.message === 'string' && err.message.startsWith('blocked_by_safety')) {
+      res.status(422).json({
+        error: 'The AI safety filter declined to process this excerpt. You can edit it to be less sensitive and try again, or share without AI changes.',
+      });
+      return;
+    }
     res.status(502).json({ error: 'The AI mediator is unavailable right now. Please try again, or edit your excerpt and share it without AI changes.' });
   }
 });

@@ -2,17 +2,20 @@
 //
 // This module is the single, documented source of truth for what the AI
 // condition actually tested: the model and version, the decoding parameters,
-// the exact mediator and validator prompts, and the allowed/disallowed
-// transformations. Each piece carries a version identifier that is stamped onto
-// every logged mediation, so the AI condition is a reproducible instrument and
-// any change to it is explicit. Lock these values (and confirm the provider's
-// data-handling settings) before participant data collection begins.
+// the safety thresholds, the exact mediator and validator prompts, and the
+// allowed/disallowed transformations. Each piece carries a version identifier
+// that is stamped onto every logged mediation, so the AI condition is a
+// reproducible instrument and any change to it is explicit. Lock these values
+// (and confirm the provider's data-handling settings) before participant data
+// collection begins.
+
+import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
 
 export const AI_CONFIG = {
   provider: 'google',
   model: 'gemini-3-flash-preview',
   // Bump config_version (and locked_at) whenever ANY field below changes.
-  config_version: 'ai-mediator-2026-06-03.2',
+  config_version: 'ai-mediator-2026-06-03.3',
   locked_at: '2026-06-03',
   mediator_prompt_version: 'mediator-v1',
   validator_prompt_version: 'validator-v1',
@@ -25,11 +28,19 @@ export const AI_CONFIG = {
     // Native JSON mode: the model returns strict, parseable JSON.
     responseMimeType: 'application/json',
   },
-  // Safety thresholds are left at the provider default and documented here.
-  // If the IRB/protocol requires explicit thresholds, set them in gemini.ts and
-  // record the descriptor here before locking.
-  safety_descriptor: 'provider default',
 } as const;
+
+// Explicit, maximum safety thresholds on all four harm categories
+// (BLOCK_LOW_AND_ABOVE = the strictest setting). Note: with the strictest
+// thresholds the model may refuse to process emotionally heavy but legitimate
+// journal content; such a refusal surfaces as a safety error and no AI
+// suggestion is produced. Adjust here (and bump config_version) if needed.
+export const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+];
 
 export const INTENTION_DESCRIPTIONS: Record<string, string> = {
   support: 'emotional support and understanding',
@@ -111,7 +122,8 @@ export function aiConfigManifest() {
     top_p: AI_CONFIG.decoding.topP,
     max_output_tokens: AI_CONFIG.decoding.maxOutputTokens,
     response_mime_type: AI_CONFIG.decoding.responseMimeType,
-    safety: AI_CONFIG.safety_descriptor,
+    safety: 'BLOCK_LOW_AND_ABOVE (all categories)',
+    safety_settings: SAFETY_SETTINGS.map((s) => ({ category: s.category, threshold: s.threshold })),
     mediator_prompt_version: AI_CONFIG.mediator_prompt_version,
     validator_prompt_version: AI_CONFIG.validator_prompt_version,
     mediator_system_prompt: MEDIATOR_SYSTEM_PROMPT,
