@@ -160,13 +160,17 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
     SELECT je.*,
       p.text AS prompt_text,
       p.prompt_type AS prompt_type,
-      spr.what_i_heard AS sim_what_i_heard,
-      spr.what_im_wondering AS sim_what_im_wondering,
-      spr.what_i_suggest AS sim_what_i_suggest,
+      pe.responder_pin AS peer_responder_pin,
+      pe.what_i_heard AS peer_what_i_heard,
+      pe.what_im_wondering AS peer_what_im_wondering,
+      pe.what_i_suggest AS peer_what_i_suggest,
+      pe.status AS peer_status,
+      pe.responded_at AS peer_responded_at,
+      pe.read_at AS peer_read_at,
       ra.content AS reflection_content
     FROM journal_entries je
     LEFT JOIN prompts p ON p.id = je.prompt_id
-    LEFT JOIN simulated_peer_responses spr ON spr.journal_entry_id = je.id
+    LEFT JOIN peer_exchanges pe ON pe.entry_id = je.id AND pe.writer_pin = je.user_pin
     LEFT JOIN reflection_addendums ra ON ra.journal_entry_id = je.id
     WHERE je.user_pin = ?
     ORDER BY je.created_at DESC

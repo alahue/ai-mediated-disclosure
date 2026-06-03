@@ -182,6 +182,11 @@ function TaskRow({
   })();
 
   const action = (() => {
+    // Completed peer responses stay re-readable (re-reading doesn't change the
+    // recorded read timestamp).
+    if (task.type === 'read_response' && done) {
+      return <Button size="sm" variant="ghost" onClick={onRead}>View</Button>;
+    }
     if (!available) return null;
     switch (task.type) {
       case 'write':

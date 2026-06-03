@@ -69,10 +69,11 @@ export interface JournalEntry {
   intention?: 'support' | 'accountability' | 'perspective' | 'connection' | null;
   shared: boolean;
   approved?: boolean;
-  // Simulated peer response (joined from DB)
-  sim_what_i_heard?: string | null;
-  sim_what_im_wondering?: string | null;
-  sim_what_i_suggest?: string | null;
+  // Peer response to this entry (joined from peer_exchanges)
+  peer_what_i_heard?: string | null;
+  peer_what_im_wondering?: string | null;
+  peer_what_i_suggest?: string | null;
+  peer_responded_at?: string | null;
   // Reflection addendum (joined from DB)
   reflection_content?: string | null;
 }

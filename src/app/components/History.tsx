@@ -86,7 +86,7 @@ export function History() {
                             {entry.shared && (
                               <Badge variant="secondary" className="text-xs">Shared</Badge>
                             )}
-                            {entry.sim_what_i_heard && (
+                            {entry.peer_what_i_heard && (
                               <Badge variant="secondary" className="text-xs">Has Response</Badge>
                             )}
                             {entry.reflection_content && (
@@ -202,24 +202,24 @@ export function History() {
                     </>
                   )}
 
-                  {/* Simulated Peer Response */}
-                  {currentEntry.sim_what_i_heard && (
+                  {/* Peer Response */}
+                  {currentEntry.peer_what_i_heard && (
                     <>
                       <Separator />
                       <div>
                         <h3 className="font-semibold mb-2">Peer Response</h3>
                         <div className="p-4 bg-green-50 rounded-lg space-y-3">
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I heard:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_i_heard}</p>
+                            <h4 className="font-medium text-sm mb-1">What they heard:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_i_heard}</p>
                           </div>
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I'm wondering:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_im_wondering}</p>
+                            <h4 className="font-medium text-sm mb-1">What they're wondering:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_im_wondering}</p>
                           </div>
                           <div>
-                            <h4 className="font-medium text-sm mb-1">What I suggest:</h4>
-                            <p className="text-sm">{currentEntry.sim_what_i_suggest}</p>
+                            <h4 className="font-medium text-sm mb-1">What they suggest:</h4>
+                            <p className="text-sm">{currentEntry.peer_what_i_suggest}</p>
                           </div>
                         </div>
                       </div>

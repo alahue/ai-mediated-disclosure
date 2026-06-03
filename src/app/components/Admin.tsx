@@ -206,7 +206,7 @@ export function Admin() {
                               </span>
                               {!!entry.shared && <Badge variant="secondary" className="text-xs">Shared</Badge>}
                               {entry.intention && <Badge variant="outline" className="text-xs capitalize">{entry.intention}</Badge>}
-                              {entry.sim_what_i_heard && <Badge variant="secondary" className="text-xs">Has AI Response</Badge>}
+                              {entry.peer_what_i_heard && <Badge variant="secondary" className="text-xs">Peer Responded</Badge>}
                               {entry.reflection_content && <Badge variant="secondary" className="text-xs">Reflected</Badge>}
                             </div>
                             <p className="text-sm line-clamp-3 cursor-pointer hover:text-indigo-600"
@@ -292,13 +292,13 @@ export function Admin() {
                         <p className="text-sm whitespace-pre-wrap bg-orange-50 p-3 rounded-lg">{selectedEntry.mediator_warning}</p>
                       </div>
                     )}
-                    {selectedEntry.sim_what_i_heard && (
+                    {selectedEntry.peer_what_i_heard && (
                       <div>
-                        <h4 className="font-semibold mb-1">Simulated Peer Response</h4>
+                        <h4 className="font-semibold mb-1">Peer Response</h4>
                         <div className="text-sm bg-green-50 p-3 rounded-lg space-y-2">
-                          <p><span className="font-medium">What I heard:</span> {selectedEntry.sim_what_i_heard}</p>
-                          <p><span className="font-medium">What I'm wondering:</span> {selectedEntry.sim_what_im_wondering}</p>
-                          <p><span className="font-medium">What I suggest:</span> {selectedEntry.sim_what_i_suggest}</p>
+                          <p><span className="font-medium">What they heard:</span> {selectedEntry.peer_what_i_heard}</p>
+                          <p><span className="font-medium">What they're wondering:</span> {selectedEntry.peer_what_im_wondering}</p>
+                          <p><span className="font-medium">What they suggest:</span> {selectedEntry.peer_what_i_suggest}</p>
                         </div>
                       </div>
                     )}
