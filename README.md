@@ -1,121 +1,85 @@
 # AI Peer Journaling App
 
-An AI-mediated peer journaling platform for the study **"From Private
-Reflection to AI-Mediated Disclosure."** It is being adapted from a usability
-prototype into an instrumented field-study platform: a 3-week within-subjects
-crossover (private / manual-sharing / AI-mediated conditions), with a matched
-daily writing-prompt schedule, entry-linked behavioral logging, rotating
-anonymous peers, and in-app survey instruments.
+An AI-mediated peer journaling platform for the CHI study **"From Private
+Reflection to AI-Mediated Disclosure."** It runs a 3-week within-subjects
+crossover field study comparing three journaling conditions — private, manual
+peer sharing, and AI-mediated peer sharing — with a matched daily prompt
+schedule, entry-linked behavioral logging, rotating anonymous peers, in-app
+survey instruments, a frozen AI mediator, and de-identified data export.
 
 The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1kjj7HZQ/AI-Peer-Journaling-App.
 
-## Study platform: build status
+## What it does
 
-The platform is being rebuilt in phases.
+The platform runs a **3-week within-subjects crossover** field study in which
+every participant completes three journaling conditions — **private**, **manual
+peer sharing**, and **AI-mediated peer sharing** — one per week, in one of six
+fully counterbalanced orders. Each condition has five daily sessions (15 study
+days total) with three focal writing entries, and all measurement is linked to
+entries rather than calendar days.
 
-**Phase 6 (AI freezing & full mediation logging)** is in place:
+### Enrollment & scheduling
+- Participants log in with a 4-digit PIN; the admin assigns a counterbalanced
+  condition order automatically at creation.
+- The daily cadence runs on an **admin-advanced "study day" (0–15)** for
+  deterministic piloting; real timestamps are still recorded.
+- Each login opens a guided **Today** screen — a daily task checklist that gates
+  each task (available / done / locked / waiting / missed) and links to the right
+  action.
 
-- **Frozen AI instrument** (`server/study/ai-config.ts`) — a single documented
-  source of truth for the AI condition: model + version, decoding parameters
-  (temperature, top-p, max output tokens), the exact mediator and validator
-  prompts, and the allowed/disallowed transformations, each carrying a version
-  identifier. Decoding settings are applied on every call, and the frozen config
-  is viewable in the admin dashboard and shipped with every export.
-- **Full mediation I/O log** (`ai_mediations`) — one row per model call, including
-  **regenerated and rejected** suggestions, with the input excerpt, suggested
-  text, explanation, warning, validator result, disposition (generated /
-  regenerated / accepted / edited / canceled), final text, and the config/prompt
-  version stamp. The analysis tier exposes the de-identified version (lengths,
-  dispositions, suggestion→final edit distance — no text); the raw tier keeps the
-  full text.
+### Writing & prompts
+- Participants write and save their own entries against a **matched daily prompt
+  schedule** (the same three prompt types each week, in the same order).
+- Each entry is linked to its condition, condition order, study day, entry index,
+  prompt, and write start/complete times.
 
-This completes every deliverable.
+### Conditions & sharing (procedural parity)
+- The two social conditions share an **identical workflow** — choose a sharing
+  intention, select/edit the excerpt, preview exactly what the peer will see,
+  then approve / edit / cancel.
+- The **AI condition adds only** a disclosure-mediation step: a suggested/redacted
+  version, an explanation of changes, an oversharing warning, and a regenerate
+  option. The AI never shares autonomously; nothing is sent without explicit
+  approval.
+- The **private condition** writes only, with a delayed private reflection.
 
-**Phase 5 (data export & de-identification)** is in place:
+### Rotating anonymous peers
+- Each shared entry is routed to a single **different anonymous responder**, drawn
+  from a pool keyed by condition + entry index, honoring a no-repeat-pairing rule
+  so peers rotate across entries.
+- Peers reply with a **structured three-part response** ("what I heard / am
+  wondering / suggest"). The writer later reads the response and writes a
+  reflection.
+- **Missed responses** are handled (real peers only): if none arrives by the read
+  day, the task is marked missing and the writer's own data is retained.
 
-- **Two de-identified export tiers** from the admin dashboard (per-table CSV and a
-  JSON bundle):
-  - **Analysis bundle** — pseudonymous participant IDs, entry metadata + behavioral
-    metrics, the event log, peer-exchange timing, and survey responses (long
-    format with reverse-coding flags). No raw journal text.
-  - **Blinded coding export** — original journal entries for reflection-quality
-    coding, with condition labels and timestamps stripped and entries shuffled so
-    coders stay blind to condition.
-- **De-identification** maps PINs to stable pseudonymous IDs (P01, P02, …),
-  scrubs PINs from logged event payloads, and runs an automated PII-redaction
-  pass (emails, phones, URLs, @handles) over exported text. Automated redaction
-  is a safety net — human review is still required before sharing externally.
+### In-app surveys
+- **Entry experience check** (condition-specific) after the write/share decision;
+  **peer response check** when reading a peer reply (social conditions only); and
+  an **end-of-condition survey** at the end of each week (with social- and
+  AI-specific item blocks). Items are 5-point Likert, transcribed verbatim from
+  the study instruments.
 
-This completes every deliverable except the intentionally-deferred AI prompt/
-model freezing.
+### Behavioral & AI logging
+- An append-only **event log** records the behavioral disclosure measures —
+  share/no-share, excerpt length, percentage shared, time-to-share, edit distance,
+  cancellations, AI action, and regenerations — plus enrollment, sessions, peer
+  assignment/response/read timing, and survey submissions.
+- The **AI mediator is a frozen, versioned instrument**: model + version, decoding
+  parameters, explicit safety thresholds, and the exact mediator/validator prompts
+  are pinned and stamped onto every call. The **full mediation I/O** (every
+  suggestion, including regenerated and rejected ones) is persisted.
 
-**Phase 4 (in-app surveys)** is in place:
-
-- **Three instruments**, with items transcribed verbatim from the study survey
-  documents and presented on a 5-point Likert scale:
-  - **Entry experience check** — condition-specific (private/manual/AI), fires
-    after writing and the privacy/sharing decision, before any peer response.
-  - **Peer response check** — social conditions only, fires when the writer
-    reads the peer response to their own entry.
-  - **End-of-condition survey** — C-items always; S-items in the social
-    conditions; AI-mediator items in the AI condition only.
-- **Right-moment gating** via the Today flow, and one response row per item
-  stored in `survey_responses` with a `survey_submitted` event.
-- Legacy `/menu` and `/review` screens removed; the guided Today flow is the
-  single participant hub.
-
-**Phase 3 (rotating dyad routing)** is in place:
-
-- **Rotating anonymous peers** — each shared entry is routed to a single
-  different responder, drawn from a pool keyed by condition + entry index. The
-  assignment honors the no-repeat-pairing rule (§5): the same two participants
-  are never paired twice within a condition, so peers rotate across entries.
-- **Structured peer response** — the three-part template (what I heard / am
-  wondering / suggest, with a "No suggestion" option) with lightweight minimum
-  lengths.
-- **Read + social reflection** — the writer reads the peer's response to their
-  own entry (recording the read timestamp) and then reflects.
-- **Missed-response handling** — real peers only, no AI backup: if no response
-  arrives by the read day the task is marked missing; writer data is retained.
-- **Timing logs** — assigned responder, response timestamp, read timestamp, and
-  missed/delayed flags are all logged for analysis.
-
-**Phase 2 (condition workflows & session orchestration)** is in place:
-
-- **Guided "Today" session** — after login, participants land on a daily task
-  checklist (`/today`) that gates each task by status (available / done / locked)
-  and surfaces later-phase tasks (peer exchange, surveys) as upcoming.
-- **Condition-parallel sharing** — the manual and AI social conditions share an
-  identical workflow (intention → select/edit excerpt → preview exactly what the
-  peer sees → approve / edit / cancel). The **AI condition adds only** a mediation
-  review step: an §8-aligned suggested/redacted version, an oversharing warning,
-  an explanation of changes, and a regenerate option. Nothing is shared without
-  explicit approval.
-- **Behavioral disclosure logging** — share/no-share, excerpt length, percentage
-  shared, time-to-share, edit distance (excerpt→final and AI→final), canceled
-  share, AI action, and regeneration count, all recorded to the event log.
-- **Private-condition delayed reflection** — reflect on a prior entry with no peer.
-
-*Deferred to Phase 3* (need a real peer): responding to a peer's entry, reading
-the peer's response to your own entry, and the social reflection-after-response.
-*Phase 4*: the three in-app survey instruments. *Deferred*: AI prompt/model
-freezing. The legacy `/menu` and `/review` screens remain for now.
-
-**Phase 1 (foundations)** is in place:
-
-- **Counterbalanced enrollment** — each participant is assigned one of the six
-  condition orders in round-robin order at creation.
-- **Admin-advanced study day** — the cadence is driven by an admin control
-  (`current_study_day`, 0–15) rather than the real clock, for deterministic
-  piloting; real timestamps are still logged.
-- **Matched prompt schedule** — the three Appendix-A writing prompts, served per
-  entry/condition day.
-- **Real entry authoring** — participants write and save their own entries
-  (sample-entry seeding removed); each entry is linked to its condition,
-  condition order, study day, entry index, prompt, and write start/complete
-  times (§7 data linkage).
-- **Event-log spine** — an append-only `events` table records enrollment,
-  session starts, study-day changes, and entry creation/deletion.
+### Privacy, de-identification & export
+- Data are isolated by PIN; peers appear only as anonymous pseudonyms; nothing is
+  shared without preview and approval.
+- The admin dashboard exports three tiers: a **de-identified analysis bundle**
+  (pseudonymous IDs, metadata, behavioral metrics, surveys — no raw text), a
+  **blinded coding export** (entries, peer responses, reflections —
+  condition-stripped, shuffled, PII-redacted), and an access-controlled **raw
+  tier** (full text plus the PIN↔ID mapping for re-linking). Both shareable tiers
+  run an automated PII-redaction pass; human review is still required before
+  sharing externally.
 
 ## Architecture
 
