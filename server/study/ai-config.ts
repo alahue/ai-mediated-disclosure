@@ -12,14 +12,18 @@ export const AI_CONFIG = {
   provider: 'google',
   model: 'gemini-3-flash-preview',
   // Bump config_version (and locked_at) whenever ANY field below changes.
-  config_version: 'ai-mediator-2026-06-03',
+  config_version: 'ai-mediator-2026-06-03.2',
   locked_at: '2026-06-03',
   mediator_prompt_version: 'mediator-v1',
   validator_prompt_version: 'validator-v1',
   decoding: {
     temperature: 0.3,
     topP: 0.95,
-    maxOutputTokens: 1024,
+    // Large enough to hold a polished copy of a long entry plus the explanation;
+    // too small a budget truncates the JSON response.
+    maxOutputTokens: 4096,
+    // Native JSON mode: the model returns strict, parseable JSON.
+    responseMimeType: 'application/json',
   },
   // Safety thresholds are left at the provider default and documented here.
   // If the IRB/protocol requires explicit thresholds, set them in gemini.ts and
@@ -106,6 +110,7 @@ export function aiConfigManifest() {
     temperature: AI_CONFIG.decoding.temperature,
     top_p: AI_CONFIG.decoding.topP,
     max_output_tokens: AI_CONFIG.decoding.maxOutputTokens,
+    response_mime_type: AI_CONFIG.decoding.responseMimeType,
     safety: AI_CONFIG.safety_descriptor,
     mediator_prompt_version: AI_CONFIG.mediator_prompt_version,
     validator_prompt_version: AI_CONFIG.validator_prompt_version,

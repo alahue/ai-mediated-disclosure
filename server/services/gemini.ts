@@ -30,6 +30,7 @@ export async function generateContent(systemPrompt: string, userPrompt: string):
       temperature: AI_CONFIG.decoding.temperature,
       topP: AI_CONFIG.decoding.topP,
       maxOutputTokens: AI_CONFIG.decoding.maxOutputTokens,
+      responseMimeType: AI_CONFIG.decoding.responseMimeType,
     },
   });
 
@@ -54,11 +55,17 @@ export function parseJsonResponse<T>(text: string): T {
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Try to extract JSON object from the text
+    // Try to extract a JSON object from the text
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (match) {
-      return JSON.parse(match[0]);
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        /* fall through */
+      }
     }
-    throw new Error('Failed to parse JSON from AI response');
+    // Surface a snippet to make truncation/formatting issues diagnosable.
+    const snippet = cleaned.slice(0, 200).replace(/\s+/g, ' ');
+    throw new Error(`Failed to parse JSON from AI response (got ${cleaned.length} chars): ${snippet}…`);
   }
 }
