@@ -43,8 +43,15 @@ export function Respond() {
     return () => { active = false; };
   }, [slot]);
 
+  // Lightweight minimum lengths, mirroring the server (§11).
+  const MIN = { heard: 10, wondering: 10, suggest: 2 };
+  const heardOk = heard.trim().length >= MIN.heard;
+  const wonderingOk = wondering.trim().length >= MIN.wondering;
+  const suggestOk = suggest.trim().length >= MIN.suggest;
+  const allOk = heardOk && wonderingOk && suggestOk;
+
   const handleSubmit = async () => {
-    if (!exchange) return;
+    if (!exchange || !allOk) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -145,18 +152,24 @@ export function Respond() {
             hint="Briefly restate what the writer shared."
             value={heard}
             onChange={setHeard}
+            ok={heardOk}
+            needHint="Please write at least a short phrase."
           />
           <Field
             label="What I am wondering"
             hint="Offer one respectful question or point of curiosity."
             value={wondering}
             onChange={setWondering}
+            ok={wonderingOk}
+            needHint="Please write at least a short phrase."
           />
           <Field
             label="What I suggest, if anything"
             hint='Offer one supportive suggestion or next step. You may write "No suggestion".'
             value={suggest}
             onChange={setSuggest}
+            ok={suggestOk}
+            needHint='Add a suggestion, or use "No suggestion".'
             extra={
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSuggest('No suggestion')}>
                 No suggestion
@@ -165,7 +178,7 @@ export function Respond() {
           />
           {error && <p className="text-sm text-red-500">{error}</p>}
           <div className="flex justify-end">
-            <Button onClick={handleSubmit} disabled={submitting}>
+            <Button onClick={handleSubmit} disabled={submitting || !allOk}>
               {submitting ? 'Submitting…' : 'Submit response'}
             </Button>
           </div>
@@ -176,14 +189,18 @@ export function Respond() {
 }
 
 function Field({
-  label, hint, value, onChange, extra,
+  label, hint, value, onChange, extra, ok, needHint,
 }: {
   label: string;
   hint: string;
   value: string;
   onChange: (v: string) => void;
   extra?: React.ReactNode;
+  ok: boolean;
+  needHint: string;
 }) {
+  // Only nudge once the participant has started typing in this field.
+  const showNeed = !ok && value.trim().length > 0;
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
@@ -192,6 +209,7 @@ function Field({
       </div>
       <p className="text-xs text-gray-500 mb-2">{hint}</p>
       <Textarea value={value} onChange={(e) => onChange(e.target.value)} className="min-h-[80px]" />
+      {showNeed && <p className="text-xs text-amber-600 mt-1">{needHint}</p>}
     </div>
   );
 }

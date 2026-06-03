@@ -127,8 +127,12 @@ router.post('/:id/respond', (req: Request, res: Response) => {
   const what_i_suggest = (req.body?.what_i_suggest ?? '').trim();
 
   if (what_i_heard.length < MIN_HEARD || what_im_wondering.length < MIN_WONDERING || what_i_suggest.length < MIN_SUGGEST) {
+    const tooShort: string[] = [];
+    if (what_i_heard.length < MIN_HEARD) tooShort.push('“What I heard”');
+    if (what_im_wondering.length < MIN_WONDERING) tooShort.push('“What I am wondering”');
+    if (what_i_suggest.length < MIN_SUGGEST) tooShort.push('“What I suggest”');
     res.status(400).json({
-      error: 'Please complete all three parts. Use "No suggestion" if a suggestion is not appropriate.',
+      error: `Please write a little more for: ${tooShort.join(', ')}. For the suggestion you can write "No suggestion" if one isn't appropriate.`,
     });
     return;
   }
