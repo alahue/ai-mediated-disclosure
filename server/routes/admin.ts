@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { requireAdmin } from '../middleware/admin-auth.js';
 import { logEvent } from '../services/events.js';
+import { buildExport, type ExportTier } from '../services/export.js';
+import { toCsv } from '../services/csv.js';
 import {
   assignConditionOrder,
   encodeConditionOrder,
@@ -189,6 +191,44 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
   const dayPlan = getDayPlan(decodeConditionOrder(user.condition_order), user.current_study_day ?? 0);
 
   res.json({ user, dayPlan, journalEntries, peerEntries });
+});
+
+// Data export (§13). Two de-identified tiers: an analysis bundle (pseudonymous
+// IDs, no raw journal text) and a blinded coding export (original entries,
+// condition/timestamps stripped, PII-redacted). format=json returns the whole
+// tier; format=csv&table=NAME returns one table as a CSV download.
+router.get('/export', requireAdmin, (req: Request, res: Response) => {
+  const tier = req.query.tier as ExportTier;
+  const format = (req.query.format as string) || 'json';
+
+  if (tier !== 'analysis' && tier !== 'coding') {
+    res.status(400).json({ error: 'tier must be "analysis" or "coding"' });
+    return;
+  }
+
+  const bundle = buildExport(getDb(), tier);
+  if (!bundle) {
+    res.status(400).json({ error: 'Unknown export tier' });
+    return;
+  }
+
+  if (format === 'csv') {
+    const table = req.query.table as string;
+    const t = table && bundle[table];
+    if (!t) {
+      res.status(400).json({ error: `Unknown table. Available: ${Object.keys(bundle).join(', ')}` });
+      return;
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${tier}_${table}.csv"`);
+    res.send(toCsv(t.columns, t.rows));
+    return;
+  }
+
+  // JSON: tables as plain row arrays, plus a manifest of available tables.
+  const tables: Record<string, unknown[]> = {};
+  for (const [name, t] of Object.entries(bundle)) tables[name] = t.rows;
+  res.json({ tier, generated_at: new Date().toISOString(), tables: Object.keys(bundle), data: tables });
 });
 
 router.delete('/entries/:id', requireAdmin, (req: Request, res: Response) => {

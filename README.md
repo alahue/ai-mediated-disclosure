@@ -13,6 +13,24 @@ The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1
 
 The platform is being rebuilt in phases.
 
+**Phase 5 (data export & de-identification)** is in place:
+
+- **Two de-identified export tiers** from the admin dashboard (per-table CSV and a
+  JSON bundle):
+  - **Analysis bundle** — pseudonymous participant IDs, entry metadata + behavioral
+    metrics, the event log, peer-exchange timing, and survey responses (long
+    format with reverse-coding flags). No raw journal text.
+  - **Blinded coding export** — original journal entries for reflection-quality
+    coding, with condition labels and timestamps stripped and entries shuffled so
+    coders stay blind to condition.
+- **De-identification** maps PINs to stable pseudonymous IDs (P01, P02, …),
+  scrubs PINs from logged event payloads, and runs an automated PII-redaction
+  pass (emails, phones, URLs, @handles) over exported text. Automated redaction
+  is a safety net — human review is still required before sharing externally.
+
+This completes every deliverable except the intentionally-deferred AI prompt/
+model freezing.
+
 **Phase 4 (in-app surveys)** is in place:
 
 - **Three instruments**, with items transcribed verbatim from the study survey

@@ -8,8 +8,21 @@ import { Separator } from './ui/separator';
 import { ScrollArea } from './ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
-import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus } from 'lucide-react';
+import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus, Download } from 'lucide-react';
 import * as api from '../utils/api';
+
+const ANALYSIS_TABLES = ['participants', 'entries', 'events', 'peer_exchanges', 'survey_responses'];
+
+function downloadBlob(filename: string, content: string, mime: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 interface UserRow {
   pin: string;
@@ -82,6 +95,28 @@ export function Admin() {
       setCreateError(err.message || 'Failed to create user');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [exportError, setExportError] = useState('');
+
+  const handleExportJson = async (tier: 'analysis' | 'coding') => {
+    setExportError('');
+    try {
+      const bundle = await api.adminExportJson(tier);
+      downloadBlob(`${tier}-export.json`, JSON.stringify(bundle, null, 2), 'application/json');
+    } catch (err: any) {
+      setExportError(err.message || 'Export failed');
+    }
+  };
+
+  const handleExportCsv = async (tier: 'analysis' | 'coding', table: string) => {
+    setExportError('');
+    try {
+      const csv = await api.adminExportCsv(tier, table);
+      downloadBlob(`${tier}_${table}.csv`, csv, 'text/csv');
+    } catch (err: any) {
+      setExportError(err.message || 'Export failed');
     }
   };
 
@@ -465,6 +500,60 @@ export function Admin() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Data Export */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Export</CardTitle>
+            <CardDescription>
+              De-identified exports for analysis. Participant PINs are replaced with pseudonymous
+              IDs and free text is auto-redacted for obvious identifiers — human review is still
+              required before sharing any export externally.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <h3 className="font-semibold text-sm mb-1">Analysis bundle</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Pseudonymous IDs, behavioral/event logs, peer-exchange timing, and survey responses
+                (long format). No raw journal text.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" className="gap-1" onClick={() => handleExportJson('analysis')}>
+                  <Download className="w-4 h-4" /> JSON bundle
+                </Button>
+                {ANALYSIS_TABLES.map((t) => (
+                  <Button key={t} size="sm" variant="outline" className="gap-1"
+                    onClick={() => handleExportCsv('analysis', t)}>
+                    <Download className="w-4 h-4" /> {t}.csv
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="font-semibold text-sm mb-1">Blinded coding export</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Original journal entries for reflection-quality coding — condition labels and
+                timestamps stripped, entries shuffled, PII auto-redacted, so coders stay blind to
+                condition.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" className="gap-1" onClick={() => handleExportJson('coding')}>
+                  <Download className="w-4 h-4" /> JSON
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1"
+                  onClick={() => handleExportCsv('coding', 'entries_for_coding')}>
+                  <Download className="w-4 h-4" /> entries_for_coding.csv
+                </Button>
+              </div>
+            </div>
+
+            {exportError && <p className="text-sm text-red-500">{exportError}</p>}
           </CardContent>
         </Card>
 
