@@ -1,8 +1,16 @@
 import type Database from 'better-sqlite3';
 import { buildPinMap, mapPin, redactText, sanitizePayload, type PinMap } from './deidentify.js';
-import { charCount, wordCount } from './text-metrics.js';
+import { charCount, wordCount, editDistance } from './text-metrics.js';
 import { getSurveyItems, type SurveyType } from '../study/surveys.js';
+import { aiConfigManifest } from '../study/ai-config.js';
 import type { Condition } from '../study/config.js';
+
+// Single-row manifest of the frozen AI configuration, included with each tier so
+// the documented instrument travels with the data (§8).
+function aiConfigTable(): Table {
+  const m = aiConfigManifest() as Record<string, unknown>;
+  return { columns: Object.keys(m), rows: [m] };
+}
 
 export interface Table {
   columns: string[];
@@ -54,11 +62,47 @@ export function buildAnalysisExport(db: Database.Database): Bundle {
   const surveyResponses = buildSurveyResponses(db, pinMap);
 
   return {
+    ai_config: aiConfigTable(),
     participants,
     entries,
     events,
     peer_exchanges: peerExchanges,
     survey_responses: surveyResponses,
+    ai_mediations: buildAiMediationsAnalysis(db, pinMap),
+  };
+}
+
+// AI mediation log without raw text: attempt sequence, disposition, validation,
+// lengths, and the suggestion->final edit distance for the regeneration/
+// acceptance analyses (§9), stamped with the frozen config version.
+function buildAiMediationsAnalysis(db: Database.Database, pinMap: PinMap): Table {
+  const rows = (db.prepare('SELECT * FROM ai_mediations ORDER BY created_at ASC').all() as any[]).map((m) => ({
+    participant_id: mapPin(pinMap, m.user_pin),
+    entry_id: m.entry_id,
+    attempt_no: m.attempt_no,
+    intention: m.intention,
+    disposition: m.disposition,
+    validation_passed: m.validation_passed,
+    input_excerpt_char_count: m.input_excerpt ? charCount(m.input_excerpt) : null,
+    suggested_char_count: m.suggested_text ? charCount(m.suggested_text) : null,
+    final_char_count: m.final_text ? charCount(m.final_text) : null,
+    edit_distance_suggestion_to_final:
+      m.suggested_text && m.final_text ? editDistance(m.suggested_text, m.final_text) : null,
+    had_warning: m.warning ? 1 : 0,
+    model: m.model,
+    config_version: m.config_version,
+    mediator_prompt_version: m.mediator_prompt_version,
+    validator_prompt_version: m.validator_prompt_version,
+    created_at: m.created_at,
+  }));
+  return {
+    columns: [
+      'participant_id', 'entry_id', 'attempt_no', 'intention', 'disposition', 'validation_passed',
+      'input_excerpt_char_count', 'suggested_char_count', 'final_char_count',
+      'edit_distance_suggestion_to_final', 'had_warning', 'model', 'config_version',
+      'mediator_prompt_version', 'validator_prompt_version', 'created_at',
+    ],
+    rows,
   };
 }
 
@@ -364,12 +408,44 @@ export function buildRawExport(db: Database.Database): Bundle {
     })),
   };
 
+  const aiMediations: Table = {
+    columns: [
+      'mediation_id', 'participant_id', 'pin', 'entry_id', 'attempt_no', 'intention', 'disposition',
+      'input_excerpt', 'suggested_text', 'explanation', 'warning', 'final_text',
+      'validation_passed', 'validation_issues', 'model', 'config_version',
+      'mediator_prompt_version', 'validator_prompt_version', 'created_at',
+    ],
+    rows: (db.prepare('SELECT * FROM ai_mediations ORDER BY created_at ASC').all() as any[]).map((m) => ({
+      mediation_id: m.id,
+      participant_id: mapPin(pinMap, m.user_pin),
+      pin: m.user_pin,
+      entry_id: m.entry_id,
+      attempt_no: m.attempt_no,
+      intention: m.intention,
+      disposition: m.disposition,
+      input_excerpt: m.input_excerpt,
+      suggested_text: m.suggested_text,
+      explanation: m.explanation,
+      warning: m.warning,
+      final_text: m.final_text,
+      validation_passed: m.validation_passed,
+      validation_issues: m.validation_issues,
+      model: m.model,
+      config_version: m.config_version,
+      mediator_prompt_version: m.mediator_prompt_version,
+      validator_prompt_version: m.validator_prompt_version,
+      created_at: m.created_at,
+    })),
+  };
+
   return {
+    ai_config: aiConfigTable(),
     participant_map: participantMap,
     entries,
     peer_exchanges: peerExchanges,
     reflections,
     survey_responses: surveyResponses,
+    ai_mediations: aiMediations,
   };
 }
 

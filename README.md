@@ -13,6 +13,24 @@ The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1
 
 The platform is being rebuilt in phases.
 
+**Phase 6 (AI freezing & full mediation logging)** is in place:
+
+- **Frozen AI instrument** (`server/study/ai-config.ts`) — a single documented
+  source of truth for the AI condition: model + version, decoding parameters
+  (temperature, top-p, max output tokens), the exact mediator and validator
+  prompts, and the allowed/disallowed transformations, each carrying a version
+  identifier. Decoding settings are applied on every call, and the frozen config
+  is viewable in the admin dashboard and shipped with every export.
+- **Full mediation I/O log** (`ai_mediations`) — one row per model call, including
+  **regenerated and rejected** suggestions, with the input excerpt, suggested
+  text, explanation, warning, validator result, disposition (generated /
+  regenerated / accepted / edited / canceled), final text, and the config/prompt
+  version stamp. The analysis tier exposes the de-identified version (lengths,
+  dispositions, suggestion→final edit distance — no text); the raw tier keeps the
+  full text.
+
+This completes every deliverable.
+
 **Phase 5 (data export & de-identification)** is in place:
 
 - **Two de-identified export tiers** from the admin dashboard (per-table CSV and a
@@ -98,8 +116,6 @@ freezing. The legacy `/menu` and `/review` screens remain for now.
   times (§7 data linkage).
 - **Event-log spine** — an append-only `events` table records enrollment,
   session starts, study-day changes, and entry creation/deletion.
-
-The only intentionally-deferred item is AI prompt/model freezing.
 
 ## Architecture
 

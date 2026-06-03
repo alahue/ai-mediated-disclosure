@@ -5,6 +5,7 @@ import { requireAdmin } from '../middleware/admin-auth.js';
 import { logEvent } from '../services/events.js';
 import { buildExport, type ExportTier } from '../services/export.js';
 import { toCsv } from '../services/csv.js';
+import { aiConfigManifest } from '../study/ai-config.js';
 import {
   assignConditionOrder,
   encodeConditionOrder,
@@ -191,6 +192,11 @@ router.get('/users/:pin/history', requireAdmin, (req: Request, res: Response) =>
   const dayPlan = getDayPlan(decodeConditionOrder(user.condition_order), user.current_study_day ?? 0);
 
   res.json({ user, dayPlan, journalEntries, peerEntries });
+});
+
+// The frozen AI configuration (§8), for verification/IRB.
+router.get('/ai-config', requireAdmin, (_req: Request, res: Response) => {
+  res.json(aiConfigManifest());
 });
 
 // Data export (§13). Two de-identified tiers: an analysis bundle (pseudonymous

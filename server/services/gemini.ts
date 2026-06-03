@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AI_CONFIG } from '../study/ai-config.js';
 
 let genAI: GoogleGenerativeAI;
 
@@ -11,14 +12,25 @@ export function initGemini(): void {
   genAI = new GoogleGenerativeAI(apiKey);
 }
 
+export function getModelId(): string {
+  return AI_CONFIG.model;
+}
+
 export async function generateContent(systemPrompt: string, userPrompt: string): Promise<string> {
   if (!genAI) {
     throw new Error('Gemini API not initialized. Set GEMINI_API_KEY in .env');
   }
 
+  // Model and decoding parameters come from the frozen AI configuration (§8) so
+  // the AI condition behaves identically across the whole data-collection window.
   const model = genAI.getGenerativeModel({
-    model: 'gemini-3-flash-preview',
+    model: AI_CONFIG.model,
     systemInstruction: systemPrompt,
+    generationConfig: {
+      temperature: AI_CONFIG.decoding.temperature,
+      topP: AI_CONFIG.decoding.topP,
+      maxOutputTokens: AI_CONFIG.decoding.maxOutputTokens,
+    },
   });
 
   const result = await model.generateContent(userPrompt);

@@ -11,9 +11,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Lock, Plus, Trash2, Eye, ArrowLeft, Minus, Download } from 'lucide-react';
 import * as api from '../utils/api';
 
-const ANALYSIS_TABLES = ['participants', 'entries', 'events', 'peer_exchanges', 'survey_responses'];
+const ANALYSIS_TABLES = ['ai_config', 'participants', 'entries', 'events', 'peer_exchanges', 'survey_responses', 'ai_mediations'];
 const CODING_TABLES = ['entries_for_coding', 'peer_responses_for_coding', 'reflections'];
-const RAW_TABLES = ['participant_map', 'entries', 'peer_exchanges', 'reflections', 'survey_responses'];
+const RAW_TABLES = ['ai_config', 'participant_map', 'entries', 'peer_exchanges', 'reflections', 'survey_responses', 'ai_mediations'];
 
 function downloadBlob(filename: string, content: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -67,6 +67,7 @@ export function Admin() {
       await api.adminLogin(password);
       setIsLoggedIn(true);
       await loadUsers();
+      api.adminGetAiConfig().then(setAiConfig).catch(() => {});
     } catch (err: any) {
       setLoginError(err.message || 'Login failed');
     }
@@ -101,6 +102,7 @@ export function Admin() {
   };
 
   const [exportError, setExportError] = useState('');
+  const [aiConfig, setAiConfig] = useState<Record<string, any> | null>(null);
 
   const handleExportJson = async (tier: api.ExportTier) => {
     setExportError('');
@@ -504,6 +506,44 @@ export function Admin() {
             )}
           </CardContent>
         </Card>
+
+        {/* Frozen AI configuration */}
+        {aiConfig && (
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Configuration (frozen)</CardTitle>
+              <CardDescription>
+                The documented AI-mediator instrument used in the AI condition. Lock these values
+                before data collection; any change should bump the config version.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-gray-500">Model:</span> <span className="font-mono">{aiConfig.model}</span></div>
+                <div><span className="text-gray-500">Config version:</span> <span className="font-mono">{aiConfig.config_version}</span></div>
+                <div><span className="text-gray-500">Locked:</span> {aiConfig.locked_at}</div>
+                <div><span className="text-gray-500">Temperature:</span> {aiConfig.temperature}</div>
+                <div><span className="text-gray-500">top_p:</span> {aiConfig.top_p}</div>
+                <div><span className="text-gray-500">Max output tokens:</span> {aiConfig.max_output_tokens}</div>
+                <div><span className="text-gray-500">Safety:</span> {aiConfig.safety}</div>
+                <div><span className="text-gray-500">Prompts:</span> {aiConfig.mediator_prompt_version} / {aiConfig.validator_prompt_version}</div>
+              </div>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-indigo-600">View mediator &amp; validator prompts</summary>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <p className="font-medium text-xs uppercase tracking-wide text-gray-500 mb-1">Mediator system prompt</p>
+                    <pre className="whitespace-pre-wrap bg-gray-50 p-3 rounded text-xs">{aiConfig.mediator_system_prompt}</pre>
+                  </div>
+                  <div>
+                    <p className="font-medium text-xs uppercase tracking-wide text-gray-500 mb-1">Validator system prompt</p>
+                    <pre className="whitespace-pre-wrap bg-gray-50 p-3 rounded text-xs">{aiConfig.validator_system_prompt}</pre>
+                  </div>
+                </div>
+              </details>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Data Export */}
         <Card>

@@ -285,6 +285,10 @@ export interface ExportBundle {
   data: Record<string, any[]>;
 }
 
+export async function adminGetAiConfig() {
+  return adminRequest<Record<string, any>>('/ai-config');
+}
+
 export type ExportTier = 'analysis' | 'coding' | 'raw';
 
 export async function adminExportJson(tier: ExportTier) {
