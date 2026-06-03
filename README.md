@@ -7,8 +7,6 @@ peer sharing, and AI-mediated peer sharing — with a matched daily prompt
 schedule, entry-linked behavioral logging, rotating anonymous peers, in-app
 survey instruments, a frozen AI mediator, and de-identified data export.
 
-The original design is available at https://www.figma.com/design/mj7ZIx9vwfWfna1kjj7HZQ/AI-Peer-Journaling-App.
-
 ## What it does
 
 The platform runs a **3-week within-subjects crossover** field study in which
