@@ -269,6 +269,13 @@ export async function adminSetStudyDay(pin: string, body: { day?: number; delta?
   );
 }
 
+export async function adminBulkStudyDay(delta: number) {
+  return adminRequest<{ success: boolean; participants: number; updated: number }>(
+    '/study-day/bulk',
+    { method: 'POST', body: JSON.stringify({ delta }) }
+  );
+}
+
 export async function adminGetUserHistory(pin: string) {
   return adminRequest<{ user: any; journalEntries: any[]; peerEntries: any[] }>(`/users/${pin}/history`);
 }
