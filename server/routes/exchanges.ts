@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { logEvent } from '../services/events.js';
-import { decodeConditionOrder, getDayPlan } from '../study/config.js';
+import { decodeConditionOrder, getDayPlan, type Condition } from '../study/config.js';
+import { conditionRing, targetWriterPin } from '../study/rotation.js';
 
 const router = Router();
 
@@ -13,30 +14,10 @@ const MIN_WONDERING = 10;
 const MIN_SUGGEST = 2;
 
 // The participant's currently-active social condition, or null.
-function currentSocialCondition(user: any): string | null {
+function currentSocialCondition(user: any): Condition | null {
   const order = decodeConditionOrder(user.condition_order);
   const plan = getDayPlan(order, user.current_study_day ?? 0);
   return plan.is_social ? plan.condition : null;
-}
-
-// Find a pending exchange the responder is eligible to take: same condition and
-// entry index, written by someone else, and not a repeated pairing within this
-// condition (§5: avoid pairing the same two participants more than once).
-function findEligibleExchange(db: any, condition: string, entryIndex: number, responderPin: string) {
-  return db
-    .prepare(
-      `SELECT * FROM peer_exchanges pe
-       WHERE pe.condition = ? AND pe.entry_index = ? AND pe.responder_pin IS NULL
-         AND pe.status = 'pending' AND pe.writer_pin != ?
-         AND pe.writer_pin NOT IN (
-           SELECT writer_pin FROM peer_exchanges WHERE condition = ? AND responder_pin = ?
-           UNION
-           SELECT responder_pin FROM peer_exchanges WHERE condition = ? AND writer_pin = ? AND responder_pin IS NOT NULL
-         )
-       ORDER BY pe.created_at ASC
-       LIMIT 1`
-    )
-    .get(condition, entryIndex, responderPin, condition, responderPin, condition, responderPin);
 }
 
 // Public shape of an exchange for a responder (writer stays anonymous).
@@ -55,9 +36,10 @@ function toRespondView(ex: any) {
 }
 
 // Claim (assign) a peer entry to respond to for the given slot (peer entry
-// index). Idempotent: if the participant already holds an exchange for this
-// slot, it is returned. Returns 404 with code "no_peer_available" if the pool
-// is empty for this slot.
+// index), using the deterministic rotation: the participant reviews the entry of
+// the peer `slot` positions ahead of them in their condition's ring. Idempotent:
+// if the participant already holds an exchange for this slot, it is returned.
+// Returns 404 "no_peer_available" if the assigned peer hasn't shared this entry.
 router.post('/claim', (req: Request, res: Response) => {
   const userPin = (req as any).userPin as string;
   const entryIndex = Number(req.body?.entry_index);
@@ -85,19 +67,33 @@ router.post('/claim', (req: Request, res: Response) => {
     return;
   }
 
-  // Assign the oldest eligible pending exchange, guarding against races by only
-  // updating while it is still unassigned.
+  // Deterministic target: the peer `entryIndex` positions ahead in the ring.
+  const ring = conditionRing(db, condition);
+  const targetPin = targetWriterPin(ring, userPin, entryIndex);
+  if (!targetPin) {
+    res.status(404).json({ error: 'no_peer_available' });
+    return;
+  }
+
+  // Assign that peer's entry to this responder, guarding against races by only
+  // updating while it is still unassigned (or already assigned to this user).
   const assign = db.transaction(() => {
-    const candidate = findEligibleExchange(db, condition, entryIndex, userPin) as any;
-    if (!candidate) return null;
+    const target = db
+      .prepare(
+        `SELECT * FROM peer_exchanges WHERE condition = ? AND entry_index = ? AND writer_pin = ?`
+      )
+      .get(condition, entryIndex, targetPin) as any;
+    if (!target) return null; // assigned peer hasn't shared this entry yet
+    if (target.responder_pin === userPin) return target;
+    if (target.responder_pin) return null; // already taken (shouldn't happen)
     const result = db
       .prepare(
         `UPDATE peer_exchanges SET responder_pin = ?, status = 'assigned', assigned_at = datetime('now')
          WHERE id = ? AND responder_pin IS NULL`
       )
-      .run(userPin, candidate.id);
+      .run(userPin, target.id);
     if (result.changes === 0) return null;
-    return db.prepare('SELECT * FROM peer_exchanges WHERE id = ?').get(candidate.id);
+    return db.prepare('SELECT * FROM peer_exchanges WHERE id = ?').get(target.id);
   });
 
   const assigned = assign() as any;

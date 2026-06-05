@@ -42,9 +42,12 @@ entries rather than calendar days.
 - The **private condition** writes only, with a delayed private reflection.
 
 ### Rotating anonymous peers
-- Each shared entry is routed to a single **different anonymous responder**, drawn
-  from a pool keyed by condition + entry index, honoring a no-repeat-pairing rule
-  so peers rotate across entries.
+- Each shared entry is routed to a single **different anonymous responder** via a
+  **deterministic rotation** within each condition: participants form a ring
+  (ordered by participant number), and for entry _s_ each reviews the peer _s_
+  positions ahead (wrapping). Every entry gets exactly one reviewer, no one is
+  stranded, and across the three entries each participant reviews each of the
+  other peers without repeats.
 - Peers reply with a **structured three-part response** ("what I heard / am
   wondering / suggest"). The writer later reads the response and writes a
   reflection.

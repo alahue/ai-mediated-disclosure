@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { logEvent } from '../services/events.js';
-import { decodeConditionOrder, getDayPlan, type DayTask } from '../study/config.js';
+import { decodeConditionOrder, getDayPlan, type DayTask, type Condition } from '../study/config.js';
+import { conditionRing, targetWriterPin } from '../study/rotation.js';
 
 const router = Router();
 
@@ -96,23 +97,17 @@ function statusForTask(task: DayTask, ctx: TodayContext): TaskStatus {
   }
 }
 
-// Whether a pending peer entry exists that this participant may respond to for a
-// given slot, honoring the no-repeat-pairing rule (§5).
-function hasEligiblePending(db: any, condition: string, entryIndex: number, responderPin: string): boolean {
-  const row = db
-    .prepare(
-      `SELECT 1 FROM peer_exchanges pe
-       WHERE pe.condition = ? AND pe.entry_index = ? AND pe.responder_pin IS NULL
-         AND pe.status = 'pending' AND pe.writer_pin != ?
-         AND pe.writer_pin NOT IN (
-           SELECT writer_pin FROM peer_exchanges WHERE condition = ? AND responder_pin = ?
-           UNION
-           SELECT responder_pin FROM peer_exchanges WHERE condition = ? AND writer_pin = ? AND responder_pin IS NOT NULL
-         )
-       LIMIT 1`
-    )
-    .get(condition, entryIndex, responderPin, condition, responderPin, condition, responderPin);
-  return !!row;
+// Whether this participant's deterministic rotation target has shared the entry
+// for the given slot (so a peer entry is available to respond to).
+function hasEligiblePending(db: any, condition: Condition, entryIndex: number, responderPin: string): boolean {
+  const ring = conditionRing(db, condition);
+  const target = targetWriterPin(ring, responderPin, entryIndex);
+  if (!target) return false;
+  const ex = db
+    .prepare('SELECT responder_pin FROM peer_exchanges WHERE condition = ? AND entry_index = ? AND writer_pin = ?')
+    .get(condition, entryIndex, target) as any;
+  if (!ex) return false;
+  return ex.responder_pin === null || ex.responder_pin === responderPin;
 }
 
 // Returns the participant's current study-day experience: the day plan, the
@@ -165,7 +160,7 @@ router.get('/today', (req: Request, res: Response) => {
       for (const task of plan.tasks) {
         if (task.type === 'respond_peer' && task.entry_index != null) {
           eligiblePendingBySlot[task.entry_index] = hasEligiblePending(
-            db, plan.condition, task.entry_index, userPin
+            db, plan.condition as Condition, task.entry_index, userPin
           );
         }
       }
