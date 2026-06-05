@@ -135,6 +135,43 @@ router.post('/users/:pin/study-day', requireAdmin, (req: Request, res: Response)
   res.json({ success: true, pin, current_study_day: target, day_plan: plan });
 });
 
+// Advance or rewind every participant by the same delta (e.g. move the whole
+// cohort forward or back one study day). Each participant is clamped to the
+// valid range and logged individually.
+router.post('/study-day/bulk', requireAdmin, (req: Request, res: Response) => {
+  const { delta } = req.body;
+  if (typeof delta !== 'number' || !Number.isFinite(delta)) {
+    res.status(400).json({ error: 'Provide "delta" as a number' });
+    return;
+  }
+
+  const db = getDb();
+  const users = db.prepare('SELECT pin, current_study_day, condition_order FROM users').all() as any[];
+
+  const step = Math.round(delta);
+  let updated = 0;
+  const apply = db.transaction(() => {
+    for (const u of users) {
+      const current = u.current_study_day ?? 0;
+      const target = Math.max(0, Math.min(TOTAL_STUDY_DAYS + 1, current + step));
+      if (target === current) continue;
+      db.prepare('UPDATE users SET current_study_day = ? WHERE pin = ?').run(target, u.pin);
+      const plan = getDayPlan(decodeConditionOrder(u.condition_order), target);
+      logEvent(db, {
+        user_pin: u.pin,
+        study_day: target,
+        condition: plan.condition,
+        event_type: 'study_day_changed',
+        payload: { from: current, to: target, bulk: true },
+      });
+      updated += 1;
+    }
+  });
+  apply();
+
+  res.json({ success: true, participants: users.length, updated });
+});
+
 router.delete('/users/:pin', requireAdmin, (req: Request, res: Response) => {
   const { pin } = req.params;
   const db = getDb();

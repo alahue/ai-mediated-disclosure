@@ -133,6 +133,15 @@ export function Admin() {
     }
   };
 
+  const handleBulkStudyDay = async (delta: number) => {
+    try {
+      await api.adminBulkStudyDay(delta);
+      await loadUsers();
+    } catch (err) {
+      console.error('Failed to bulk-update study day:', err);
+    }
+  };
+
   const handleDeleteUser = async (pin: string) => {
     try {
       await api.adminDeleteUser(pin);
@@ -431,8 +440,31 @@ export function Admin() {
         {/* User List */}
         <Card>
           <CardHeader>
-            <CardTitle>Users ({users.length})</CardTitle>
-            <CardDescription>All registered participants</CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>Users ({users.length})</CardTitle>
+                <CardDescription>All registered participants</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">All participants:</span>
+                <Button
+                  variant="outline" size="sm" className="gap-1"
+                  disabled={users.length === 0}
+                  onClick={() => handleBulkStudyDay(-1)}
+                  title="Move every participant back one study day"
+                >
+                  <Minus className="w-4 h-4" /> 1 day
+                </Button>
+                <Button
+                  variant="outline" size="sm" className="gap-1"
+                  disabled={users.length === 0}
+                  onClick={() => handleBulkStudyDay(1)}
+                  title="Move every participant forward one study day"
+                >
+                  <Plus className="w-4 h-4" /> 1 day
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {users.length === 0 ? (
