@@ -39,7 +39,7 @@ const TASK_ICON: Record<string, React.ReactNode> = {
 
 export function Today() {
   const navigate = useNavigate();
-  const { today, loadToday, refreshData, journalEntries, setCurrentUser } = useApp();
+  const { today, loadToday, refreshData, journalEntries, setCurrentUser, currentUser } = useApp();
   const [reflectEntryId, setReflectEntryId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,7 +55,12 @@ export function Today() {
   const header = (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Today's Session</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-gray-900">Today's Session</h1>
+          {currentUser && (
+            <Badge variant="secondary" className="font-mono text-sm">PIN {currentUser}</Badge>
+          )}
+        </div>
         {today && !today.not_started && !today.complete && (
           <p className="text-gray-600 mt-1">
             Day {today.study_day} of 15 · {today.condition_label}
