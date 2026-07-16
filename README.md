@@ -53,6 +53,8 @@ entries rather than calendar days.
   reflection.
 - **Missed responses** are handled (real peers only): if none arrives by the read
   day, the task is marked missing and the writer's own data is retained.
+  -**New:** in order to be eligible to review an entry, a participant must have
+  submitted an entry on the previous day.
 
 ### In-app surveys
 - **Entry experience check** (condition-specific) after the write/share decision;
