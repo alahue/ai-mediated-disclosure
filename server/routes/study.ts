@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { logEvent } from '../services/events.js';
 import { decodeConditionOrder, getDayPlan, type DayTask, type Condition } from '../study/config.js';
-import { conditionRing, targetWriterPin } from '../study/rotation.js';
+import { sharerRing, targetWriterPin } from '../study/rotation.js';
 
 const router = Router();
 
@@ -100,7 +100,7 @@ function statusForTask(task: DayTask, ctx: TodayContext): TaskStatus {
 // Whether this participant's deterministic rotation target has shared the entry
 // for the given slot (so a peer entry is available to respond to).
 function hasEligiblePending(db: any, condition: Condition, entryIndex: number, responderPin: string): boolean {
-  const ring = conditionRing(db, condition);
+  const ring = sharerRing(db, condition, entryIndex);
   const target = targetWriterPin(ring, responderPin, entryIndex);
   if (!target) return false;
   const ex = db

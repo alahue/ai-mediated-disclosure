@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db.js';
 import { logEvent } from '../services/events.js';
 import { decodeConditionOrder, getDayPlan, type Condition } from '../study/config.js';
-import { conditionRing, targetWriterPin } from '../study/rotation.js';
+import { sharerRing, targetWriterPin } from '../study/rotation.js';
 
 const router = Router();
 
@@ -67,8 +67,10 @@ router.post('/claim', (req: Request, res: Response) => {
     return;
   }
 
-  // Deterministic target: the peer `entryIndex` positions ahead in the ring.
-  const ring = conditionRing(db, condition);
+  // Deterministic target: the peer `entryIndex` positions ahead in the ring of
+  // participants who actually shared this entry. A responder who did not share
+  // this entry is absent from the ring and gets no assignment.
+  const ring = sharerRing(db, condition, entryIndex);
   const targetPin = targetWriterPin(ring, userPin, entryIndex);
   if (!targetPin) {
     res.status(404).json({ error: 'no_peer_available' });
