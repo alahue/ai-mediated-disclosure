@@ -1,7 +1,6 @@
 # AI Peer Journaling App
 
-An AI-mediated peer journaling platform for the study **"From Private
-Reflection to AI-Mediated Disclosure."** It runs a 3-week within-subjects
+An AI-mediated peer journaling platform for an upcoming research study. It runs a 3-week within-subjects
 crossover field study comparing three journaling conditions — private, manual
 peer sharing, and AI-mediated peer sharing — with a matched daily prompt
 schedule, entry-linked behavioral logging, rotating anonymous peers, in-app
